@@ -1,0 +1,246 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidPreferences(data, userId) {
+      return data.userId is string && data.userId == userId &&
+             data.lang in ['ar', 'en'] &&
+             data.themeId is string && data.themeId.size() >= 1 && data.themeId.size() <= 40 &&
+             data.fontId is string && data.fontId.size() >= 1 && data.fontId.size() <= 40 &&
+             data.fontWeight in [400, 600, 800] &&
+             data.topBarStyle in ['T1', 'T11', 'T13', 'T18', 'T20'] &&
+             data.alertStyle in ['A1', 'A2', 'A3', 'A4', 'A5', 'A6'] &&
+             data.bannerStyle in ['B1', 'B2', 'B3', 'B4', 'B5', 'B7', 'B8'] &&
+             data.bannerIcon in ['none', 'clock', 'award', 'star', 'target'] &&
+             data.bannerTitle is string && data.bannerTitle.size() <= 100 &&
+             data.bannerSub is string && data.bannerSub.size() <= 200 &&
+             data.bannerImg is string && data.bannerImg.size() <= 2000 &&
+             data.bannerImgSize in ['small', 'medium', 'large'] &&
+             data.bannerPhotoShape in ['ring', 'circle', 'ios', 'blob'] &&
+             data.taskImgSize in ['small', 'medium', 'large'] &&
+             data.cardShape in ['ring', 'capsule', 'ios', 'blob', 'strip'] &&
+             data.showBanner is bool &&
+             data.soundNav is bool &&
+             data.soundEnter is bool &&
+             data.soundExit is bool &&
+             data.soundDone is bool &&
+             data.swipePages is bool &&
+             data.swipeClose is bool &&
+             data.hapticEnabled is bool &&
+             data.activeRingId is string && data.activeRingId.size() >= 1 && data.activeRingId.size() <= 100 &&
+             data.autoBackup is bool &&
+             data.lastBackupLabel is string && data.lastBackupLabel.size() <= 100 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidTask(data, userId) {
+      return data.userId is string && data.userId == userId &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
+             data.meta is string && data.meta.size() <= 300 &&
+             data.imgUri is string && data.imgUri.size() <= 2000 &&
+             data.repeatMode in ['NONE', 'DAILY', 'WEEKLY', 'CYCLE'] &&
+             data.cycleSteps is list && data.cycleSteps.size() <= 20 &&
+             (data.cycleSteps.size() == 0 || data.cycleSteps[0] is string) &&
+             data.cycleIndex is int && data.cycleIndex >= 0 && data.cycleIndex <= 1000 &&
+             data.weekDays is list && data.weekDays.size() <= 7 &&
+             (data.weekDays.size() == 0 || data.weekDays[0] is int) &&
+             data.alertEnabled is bool &&
+             data.alertTime is string && data.alertTime.size() <= 10 &&
+             data.nextDueDate is string && data.nextDueDate.size() <= 20 &&
+             data.lastAlertedDate is string && data.lastAlertedDate.size() <= 20 &&
+             data.sortOrder is int &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidRequest(data, userId) {
+      return data.userId is string && data.userId == userId &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
+             data.body is string && data.body.size() <= 4000 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidBackup(data, userId) {
+      return data.userId is string && data.userId == userId &&
+             data.accountLabel is string && data.accountLabel.size() <= 200 &&
+             data.clientTime is string && data.clientTime.size() <= 100 &&
+             data.tasksCount is int && data.tasksCount >= 0 && data.tasksCount <= 10000 &&
+             data.requestsCount is int && data.requestsCount >= 0 && data.requestsCount <= 10000 &&
+             data.snapshotJson is string && data.snapshotJson.size() >= 2 && data.snapshotJson.size() <= 500000 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    match /users/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow list: if false;
+
+      allow create: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       incoming().keys().hasAll([
+                         'userId', 'lang', 'themeId', 'fontId', 'fontWeight',
+                         'topBarStyle', 'alertStyle', 'bannerStyle', 'bannerIcon',
+                         'bannerTitle', 'bannerSub', 'bannerImg', 'bannerImgSize',
+                         'bannerPhotoShape', 'taskImgSize', 'cardShape', 'showBanner',
+                         'soundNav', 'soundEnter', 'soundExit', 'soundDone',
+                         'swipePages', 'swipeClose', 'hapticEnabled', 'activeRingId',
+                         'autoBackup', 'lastBackupLabel', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'lang', 'themeId', 'fontId', 'fontWeight',
+                         'topBarStyle', 'alertStyle', 'bannerStyle', 'bannerIcon',
+                         'bannerTitle', 'bannerSub', 'bannerImg', 'bannerImgSize',
+                         'bannerPhotoShape', 'taskImgSize', 'cardShape', 'showBanner',
+                         'soundNav', 'soundEnter', 'soundExit', 'soundDone',
+                         'swipePages', 'swipeClose', 'hapticEnabled', 'activeRingId',
+                         'autoBackup', 'lastBackupLabel', 'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidPreferences(incoming(), userId);
+
+      allow update: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       isValidPreferences(incoming(), userId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'lang', 'themeId', 'fontId', 'fontWeight',
+                         'topBarStyle', 'alertStyle', 'bannerStyle', 'bannerIcon',
+                         'bannerTitle', 'bannerSub', 'bannerImg', 'bannerImgSize',
+                         'bannerPhotoShape', 'taskImgSize', 'cardShape', 'showBanner',
+                         'soundNav', 'soundEnter', 'soundExit', 'soundDone',
+                         'swipePages', 'swipeClose', 'hapticEnabled', 'activeRingId',
+                         'autoBackup', 'lastBackupLabel', 'updatedAt'
+                       ]);
+
+      allow delete: if isOwner(userId) && isValidId(userId);
+
+      match /tasks/{taskId} {
+        allow get: if isOwner(userId) && isValidId(userId) && isValidId(taskId);
+        allow list: if isOwner(userId) && isValidId(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(taskId) &&
+                         incoming().keys().hasAll([
+                           'userId', 'title', 'meta', 'imgUri', 'repeatMode',
+                           'cycleSteps', 'cycleIndex', 'weekDays', 'alertEnabled',
+                           'alertTime', 'nextDueDate', 'lastAlertedDate', 'sortOrder',
+                           'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'title', 'meta', 'imgUri', 'repeatMode',
+                           'cycleSteps', 'cycleIndex', 'weekDays', 'alertEnabled',
+                           'alertTime', 'nextDueDate', 'lastAlertedDate', 'sortOrder',
+                           'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidTask(incoming(), userId);
+
+        allow update: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(taskId) &&
+                         isValidTask(incoming(), userId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         (
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'cycleIndex', 'nextDueDate', 'lastAlertedDate', 'updatedAt'
+                           ]) ||
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'imgUri', 'updatedAt'
+                           ]) ||
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'lastAlertedDate', 'updatedAt'
+                           ]) ||
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'title', 'meta', 'imgUri', 'repeatMode', 'cycleSteps',
+                             'cycleIndex', 'weekDays', 'alertEnabled', 'alertTime',
+                             'nextDueDate', 'lastAlertedDate', 'updatedAt'
+                           ])
+                         );
+
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(taskId);
+      }
+
+      match /requests/{requestId} {
+        allow get: if isOwner(userId) && isValidId(userId) && isValidId(requestId);
+        allow list: if isOwner(userId) && isValidId(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(requestId) &&
+                         incoming().keys().hasAll(['userId', 'title', 'body', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'title', 'body', 'createdAt', 'updatedAt']) &&
+                         isValidRequest(incoming(), userId);
+
+        allow update: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(requestId) &&
+                         isValidRequest(incoming(), userId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['title', 'body', 'updatedAt']);
+
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(requestId);
+      }
+
+      match /backups/{backupId} {
+        allow get: if isOwner(userId) && isValidId(userId) && isValidId(backupId);
+        allow list: if isOwner(userId) && isValidId(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(backupId) &&
+                         incoming().keys().hasAll([
+                           'userId', 'accountLabel', 'clientTime',
+                           'tasksCount', 'requestsCount', 'snapshotJson',
+                           'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'accountLabel', 'clientTime',
+                           'tasksCount', 'requestsCount', 'snapshotJson',
+                           'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidBackup(incoming(), userId);
+
+        allow update: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(backupId) &&
+                         isValidBackup(incoming(), userId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'accountLabel', 'clientTime', 'tasksCount',
+                           'requestsCount', 'snapshotJson', 'updatedAt'
+                         ]);
+
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(backupId);
+      }
+    }
+  }
+}

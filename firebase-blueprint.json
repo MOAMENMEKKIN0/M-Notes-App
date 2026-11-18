@@ -1,0 +1,124 @@
+{
+  "entities": {
+    "UserPreferences": {
+      "title": "UserPreferences",
+      "description": "User appearance, audio, banner, language, and backup settings for M Notes.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Firebase Auth UID." },
+        "lang": { "type": "string", "enum": ["ar", "en"], "description": "UI language." },
+        "themeId": { "type": "string", "description": "Selected theme ID." },
+        "fontId": { "type": "string", "description": "Selected font family ID." },
+        "fontWeight": { "type": "integer", "description": "Selected font weight (400, 600, 800)." },
+        "topBarStyle": { "type": "string", "enum": ["T1", "T11", "T13", "T18", "T20"], "description": "Top switcher bar style." },
+        "alertStyle": { "type": "string", "enum": ["A1", "A2", "A3", "A4", "A5", "A6"], "description": "Task reminder alert style." },
+        "bannerStyle": { "type": "string", "enum": ["B1", "B2", "B3", "B4", "B5", "B7", "B8"], "description": "Hero banner layout style." },
+        "bannerIcon": { "type": "string", "enum": ["none", "clock", "award", "star", "target"], "description": "Small banner icon." },
+        "bannerTitle": { "type": "string", "description": "Hero banner title." },
+        "bannerSub": { "type": "string", "description": "Hero banner subtitle." },
+        "bannerImg": { "type": "string", "description": "Banner image identifier or URI." },
+        "bannerImgSize": { "type": "string", "enum": ["small", "medium", "large"], "description": "Banner photo size." },
+        "bannerPhotoShape": { "type": "string", "enum": ["ring", "circle", "ios", "blob"], "description": "Banner photo shape." },
+        "taskImgSize": { "type": "string", "enum": ["small", "medium", "large"], "description": "Task card photo size." },
+        "cardShape": { "type": "string", "enum": ["ring", "capsule", "ios", "blob", "strip"], "description": "Task card & photo shape." },
+        "showBanner": { "type": "boolean", "description": "Whether hero banner is visible." },
+        "soundNav": { "type": "boolean", "description": "Navigation tap sound enabled." },
+        "soundEnter": { "type": "boolean", "description": "Modal open sound enabled." },
+        "soundExit": { "type": "boolean", "description": "Modal close sound enabled." },
+        "soundDone": { "type": "boolean", "description": "Completion chime enabled." },
+        "swipePages": { "type": "boolean", "description": "Horizontal page swipe enabled." },
+        "swipeClose": { "type": "boolean", "description": "Swipe down to dismiss sheets enabled." },
+        "hapticEnabled": { "type": "boolean", "description": "Haptic vibration on touch enabled." },
+        "activeRingId": { "type": "string", "description": "Active ringtone track ID." },
+        "autoBackup": { "type": "boolean", "description": "Auto cloud backup enabled." },
+        "lastBackupLabel": { "type": "string", "description": "Formatted timestamp of last backup." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp (FieldValue.serverTimestamp())." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp (FieldValue.serverTimestamp())." }
+      },
+      "required": [
+        "userId", "lang", "themeId", "fontId", "fontWeight",
+        "topBarStyle", "alertStyle", "bannerStyle", "bannerIcon",
+        "bannerTitle", "bannerSub", "bannerImg", "bannerImgSize",
+        "bannerPhotoShape", "taskImgSize", "cardShape", "showBanner",
+        "soundNav", "soundEnter", "soundExit", "soundDone",
+        "swipePages", "swipeClose", "hapticEnabled", "activeRingId",
+        "autoBackup", "lastBackupLabel", "createdAt", "updatedAt"
+      ]
+    },
+    "SmartTask": {
+      "title": "SmartTask",
+      "description": "A user task with scheduling, repeat mode, rotation cycles, weekdays, and alert settings.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Firebase Auth UID." },
+        "title": { "type": "string", "description": "Task title." },
+        "meta": { "type": "string", "description": "Subtitle or description." },
+        "imgUri": { "type": "string", "description": "Optional image URI or library reference." },
+        "repeatMode": { "type": "string", "enum": ["NONE", "DAILY", "WEEKLY", "CYCLE"], "description": "Recurrence mode." },
+        "cycleSteps": { "type": "array", "description": "Ordered rotation cycle step names." },
+        "cycleIndex": { "type": "integer", "description": "Current active rotation step index." },
+        "weekDays": { "type": "array", "description": "Selected weekday indices (0=Sun..6=Sat)." },
+        "alertEnabled": { "type": "boolean", "description": "Whether due alert is enabled." },
+        "alertTime": { "type": "string", "description": "Alert time in HH:mm format." },
+        "nextDueDate": { "type": "string", "description": "Next due date in yyyy-MM-dd format." },
+        "lastAlertedDate": { "type": "string", "description": "Last alerted date in yyyy-MM-dd format." },
+        "sortOrder": { "type": "integer", "description": "Client ordering timestamp." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp (FieldValue.serverTimestamp())." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp (FieldValue.serverTimestamp())." }
+      },
+      "required": [
+        "userId", "title", "meta", "imgUri", "repeatMode",
+        "cycleSteps", "cycleIndex", "weekDays", "alertEnabled",
+        "alertTime", "nextDueDate", "lastAlertedDate", "sortOrder",
+        "createdAt", "updatedAt"
+      ]
+    },
+    "QuickRequest": {
+      "title": "QuickRequest",
+      "description": "A saved quick note or request item.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Firebase Auth UID." },
+        "title": { "type": "string", "description": "Request title." },
+        "body": { "type": "string", "description": "Request body details." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp (FieldValue.serverTimestamp())." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp (FieldValue.serverTimestamp())." }
+      },
+      "required": ["userId", "title", "body", "createdAt", "updatedAt"]
+    },
+    "CloudBackup": {
+      "title": "CloudBackup",
+      "description": "Serialized M Notes JSON backup snapshot stored in Firestore.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Firebase Auth UID." },
+        "accountLabel": { "type": "string", "description": "Email or display identifier of the backing-up user." },
+        "clientTime": { "type": "string", "description": "Client display timestamp." },
+        "tasksCount": { "type": "integer", "description": "Number of tasks in the snapshot." },
+        "requestsCount": { "type": "integer", "description": "Number of requests in the snapshot." },
+        "snapshotJson": { "type": "string", "description": "JSON snapshot string." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp (FieldValue.serverTimestamp())." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp (FieldValue.serverTimestamp())." }
+      },
+      "required": ["userId", "accountLabel", "clientTime", "tasksCount", "requestsCount", "snapshotJson", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserPreferences" },
+      "description": "Per-user preferences and customization profile."
+    },
+    "/users/{userId}/tasks/{taskId}": {
+      "schema": { "$ref": "#/entities/SmartTask" },
+      "description": "User's scheduled and recurring rotation tasks."
+    },
+    "/users/{userId}/requests/{requestId}": {
+      "schema": { "$ref": "#/entities/QuickRequest" },
+      "description": "User's quick requests and notes."
+    },
+    "/users/{userId}/backups/{backupId}": {
+      "schema": { "$ref": "#/entities/CloudBackup" },
+      "description": "User's cloud backup snapshots."
+    }
+  }
+}

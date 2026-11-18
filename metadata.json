@@ -1,0 +1,8 @@
+{
+  "name": "M Notes",
+  "description": "Smart Tasks & Requests app with Arabic RTL & English LTR support, themes, custom banners, recurring rotation tasks, task alerts with gym ringtones & audio trimmer, and Firebase cloud backup.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
