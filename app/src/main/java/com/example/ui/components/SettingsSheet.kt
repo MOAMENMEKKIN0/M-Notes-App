@@ -28,6 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Logout
+import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.Backup
 import androidx.compose.material.icons.rounded.Brush
 import androidx.compose.material.icons.rounded.ContentCut
@@ -81,6 +82,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.credentials.CredentialManager
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.localization.AppStrings
 import com.example.model.LibraryPhoto
 import com.example.model.MNotesCatalog
@@ -89,6 +91,7 @@ import com.example.model.SmartTask
 import com.example.model.TrimmedRingtone
 import com.example.model.UserPreferences
 import com.example.ui.MNotesViewModel
+import com.example.ui.auth.onGoogleSignInClicked
 import com.example.ui.auth.signOut
 import com.example.ui.theme.LocalMNotesColors
 import com.example.ui.theme.fontFamilyForId
@@ -118,9 +121,12 @@ fun SettingsSheet(
     val scope = rememberCoroutineScope()
     val credentialManager = remember(context) { CredentialManager.create(context) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val connectedEmail by viewModel.connectedEmail.collectAsStateWithLifecycle()
 
     var openFolder by remember { mutableStateOf<String?>(null) }
     var openSubSection by remember { mutableStateOf<String?>(null) }
+    var isLinkingGoogle by remember { mutableStateOf(false) }
+    var googleLinkError by remember { mutableStateOf<String?>(null) }
 
     // Library upload name state
     var newPhotoName by remember { mutableStateOf("") }
@@ -285,123 +291,212 @@ fun SettingsSheet(
                     openFolder = if (openFolder == "backup") null else "backup"
                 }
             ) {
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = colors.primarySoft,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, colors.primary.copy(alpha = 0.25f), RoundedCornerShape(16.dp))
-                ) {
-                    Column(
-                        modifier = Modifier.padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                val activeEmail = connectedEmail
+                if (activeEmail.isNullOrBlank()) {
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = colors.bgMain,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, colors.borderSoft, RoundedCornerShape(16.dp))
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "${AppStrings.get(lang, "online")} ${viewModel.userEmail.ifBlank { viewModel.currentUserId }}",
-                                    color = colors.textDark,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    text = "${AppStrings.get(lang, "lastBackup")} ${prefs.lastBackupLabel.ifBlank { AppStrings.get(lang, "none") }}",
-                                    color = colors.textMuted,
-                                    fontSize = 11.sp
-                                )
+                            Text(
+                                text = AppStrings.get(lang, "localModeStatus"),
+                                color = colors.textDark,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                            Text(
+                                text = "${AppStrings.get(lang, "lastBackup")} ${prefs.lastBackupLabel.ifBlank { AppStrings.get(lang, "none") }}",
+                                color = colors.textMuted,
+                                fontSize = 11.sp
+                            )
+
+                            if (!googleLinkError.isNullOrBlank()) {
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = Color(0xFFFEE2E2),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(
+                                        text = googleLinkError!!,
+                                        color = Color(0xFFB91C1C),
+                                        fontSize = 11.sp,
+                                        modifier = Modifier.padding(8.dp)
+                                    )
+                                }
                             }
-                            OutlinedButton(
+
+                            Button(
                                 onClick = {
-                                    viewModel.playSound("exit")
-                                    signOut(credentialManager, scope)
+                                    googleLinkError = null
+                                    isLinkingGoogle = true
+                                    onGoogleSignInClicked(
+                                        context = context,
+                                        credentialManager = credentialManager,
+                                        onAuthSuccess = {
+                                            isLinkingGoogle = false
+                                            googleLinkError = null
+                                            viewModel.playSound("done")
+                                        },
+                                        onAuthError = { msg ->
+                                            isLinkingGoogle = false
+                                            googleLinkError = msg
+                                        },
+                                        scope = scope,
+                                        onAuthCancelled = { detail ->
+                                            isLinkingGoogle = false
+                                            if (!detail.isNullOrBlank()) {
+                                                googleLinkError = detail
+                                            }
+                                        }
+                                    )
                                 },
-                                shape = RoundedCornerShape(999.dp),
-                                modifier = Modifier.testTag("settings_sign_out")
+                                enabled = !isLinkingGoogle,
+                                shape = RoundedCornerShape(14.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(44.dp)
+                                    .testTag("settings_connect_google")
                             ) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Rounded.Logout,
-                                    contentDescription = null,
-                                    tint = Color(0xFFEF4444),
-                                    modifier = Modifier.size(15.dp)
-                                )
-                                Spacer(Modifier.width(4.dp))
-                                Text(
-                                    text = AppStrings.get(lang, "signOut"),
-                                    color = Color(0xFFEF4444),
-                                    fontSize = 11.5.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
+                                if (isLinkingGoogle) {
+                                    CircularProgressIndicator(
+                                        color = Color.White,
+                                        strokeWidth = 2.dp,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                } else {
+                                    Icon(Icons.Rounded.AccountCircle, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(AppStrings.get(lang, "connectGoogleBackup"), fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
                     }
-                }
-
-                Spacer(Modifier.height(8.dp))
-
-                SettingsSwitchRow(
-                    title = AppStrings.get(lang, "autoBackup"),
-                    checked = prefs.autoBackup,
-                    onCheckedChange = {
-                        viewModel.playSound("nav")
-                        viewModel.updatePreference(mapOf("autoBackup" to it))
+                } else {
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = colors.primarySoft,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, colors.primary.copy(alpha = 0.25f), RoundedCornerShape(16.dp))
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "${AppStrings.get(lang, "online")} $activeEmail",
+                                        color = colors.textDark,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = "${AppStrings.get(lang, "lastBackup")} ${prefs.lastBackupLabel.ifBlank { AppStrings.get(lang, "none") }}",
+                                        color = colors.textMuted,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                                OutlinedButton(
+                                    onClick = {
+                                        viewModel.playSound("exit")
+                                        signOut(credentialManager, scope)
+                                    },
+                                    shape = RoundedCornerShape(999.dp),
+                                    modifier = Modifier.testTag("settings_sign_out")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Rounded.Logout,
+                                        contentDescription = null,
+                                        tint = Color(0xFFEF4444),
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        text = AppStrings.get(lang, "signOut"),
+                                        color = Color(0xFFEF4444),
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
                     }
-                )
 
-                Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(8.dp))
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Button(
-                        onClick = { viewModel.runCloudBackup(isAuto = false) },
+                    SettingsSwitchRow(
+                        title = AppStrings.get(lang, "autoBackup"),
+                        checked = prefs.autoBackup,
+                        onCheckedChange = {
+                            viewModel.playSound("nav")
+                            viewModel.updatePreference(mapOf("autoBackup" to it))
+                        }
+                    )
+
+                    Spacer(Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = { viewModel.runCloudBackup(isAuto = false) },
+                            enabled = !isBusyBackup,
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(44.dp)
+                                .testTag("settings_manual_backup")
+                        ) {
+                            if (isBusyBackup) {
+                                CircularProgressIndicator(
+                                    color = Color.White,
+                                    strokeWidth = 2.dp,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            } else {
+                                Icon(Icons.Rounded.Backup, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text(AppStrings.get(lang, "manualBackup"), fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(6.dp))
+
+                    OutlinedButton(
+                        onClick = { viewModel.restoreLatestCloudBackup() },
                         enabled = !isBusyBackup,
                         shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
                         modifier = Modifier
-                            .weight(1f)
+                            .fillMaxWidth()
                             .height(44.dp)
-                            .testTag("settings_manual_backup")
+                            .testTag("settings_restore_backup")
                     ) {
-                        if (isBusyBackup) {
-                            CircularProgressIndicator(
-                                color = Color.White,
-                                strokeWidth = 2.dp,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        } else {
-                            Icon(Icons.Rounded.Backup, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text(AppStrings.get(lang, "manualBackup"), fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
-                        }
+                        Icon(Icons.Rounded.Restore, contentDescription = null, tint = colors.primary, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = AppStrings.get(lang, "restoreBackup"),
+                            color = colors.primary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
-                }
-
-                Spacer(Modifier.height(6.dp))
-
-                OutlinedButton(
-                    onClick = { viewModel.restoreLatestCloudBackup() },
-                    enabled = !isBusyBackup,
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(44.dp)
-                        .testTag("settings_restore_backup")
-                ) {
-                    Icon(Icons.Rounded.Restore, contentDescription = null, tint = colors.primary, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        text = AppStrings.get(lang, "restoreBackup"),
-                        color = colors.primary,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
-                    )
                 }
 
                 Spacer(Modifier.height(6.dp))

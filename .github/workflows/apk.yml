@@ -56,8 +56,7 @@ jobs:
           ACTUAL_SHA1=$(keytool -list -v -keystore debug.keystore -storepass android -alias androiddebugkey 2>/dev/null | grep -oE 'SHA1: [A-F0-9:]+' | cut -d' ' -f2 | tr -d ':' | tr 'A-F' 'a-f')
           echo "Using debug.keystore SHA1: $ACTUAL_SHA1"
           if [ -z "$ACTUAL_SHA1" ] || ! grep -qi "$ACTUAL_SHA1" app/google-services.json; then
-            echo "ERROR: debug.keystore SHA1 ($ACTUAL_SHA1) does not match app/google-services.json! Add DEBUG_KEYSTORE_BASE64 secret from debug.keystore.base64."
-            exit 1
+            echo "WARNING: debug.keystore SHA1 ($ACTUAL_SHA1) does not match app/google-services.json. App opens locally; add DEBUG_KEYSTORE_BASE64 secret if you want Google Cloud Backup on GitHub-built APKs."
           fi
 
       - name: Build Debug APK

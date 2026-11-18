@@ -1,11 +1,11 @@
 package com.example.ui
 
 import android.net.Uri
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.audio.SoundEngine
 import com.example.data.LocalMediaRepository
+import com.example.data.LocalStoreRepository
 import com.example.data.MNotesRepository
 import com.example.localization.AppStrings
 import com.example.model.BackupPreferencesDto
@@ -18,7 +18,9 @@ import com.example.model.RepeatMode
 import com.example.model.SmartTask
 import com.example.model.TrimmedRingtone
 import com.example.model.UserPreferences
-import com.google.firebase.firestore.FirebaseFirestoreException
+import com.google.firebase.Firebase
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.auth
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -43,40 +45,44 @@ sealed interface UiState<out T> {
 }
 
 class MNotesViewModel(
+    private val localStore: LocalStoreRepository,
     private val repository: MNotesRepository,
     private val mediaRepository: LocalMediaRepository,
-    val soundEngine: SoundEngine,
-    val currentUserId: String,
-    val userEmail: String
+    val soundEngine: SoundEngine
 ) : ViewModel() {
 
     private val json = Json { ignoreUnknownKeys = true; prettyPrint = true }
+    private val auth: FirebaseAuth = Firebase.auth
 
-    val preferences: StateFlow<UserPreferences> = repository.observePreferences(currentUserId)
+    private val _connectedUser = MutableStateFlow(auth.currentUser)
+    val connectedEmail: StateFlow<String?> = _connectedUser
+        .map { user -> user?.email?.takeIf { it.isNotBlank() } ?: user?.uid }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000L),
+            initialValue = auth.currentUser?.let { it.email?.takeIf { e -> e.isNotBlank() } ?: it.uid }
+        )
+
+    private val authListener = FirebaseAuth.AuthStateListener { firebaseAuth ->
+        _connectedUser.value = firebaseAuth.currentUser
+    }
+
+    val preferences: StateFlow<UserPreferences> = localStore.preferencesFlow
         .catch { error ->
-            val fsErr = generateSequence(error) { it.cause }
-                .filterIsInstance<FirebaseFirestoreException>()
-                .firstOrNull()
-            if (fsErr == null && error is CancellationException) throw error
-            Log.w("MNotesVM", "Error observing preferences", fsErr ?: error)
-            emit(UserPreferences(userId = currentUserId))
+            if (error is CancellationException) throw error
+            emit(UserPreferences(userId = "local"))
         }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000L),
-            initialValue = UserPreferences(userId = currentUserId)
+            initialValue = UserPreferences(userId = "local")
         )
 
-    val tasksState: StateFlow<UiState<List<SmartTask>>> = repository.observeTasks(currentUserId)
+    val tasksState: StateFlow<UiState<List<SmartTask>>> = localStore.tasksFlow
         .map<List<SmartTask>, UiState<List<SmartTask>>> { UiState.Success(it) }
         .catch { error ->
-            val fsErr = generateSequence(error) { it.cause }
-                .filterIsInstance<FirebaseFirestoreException>()
-                .firstOrNull()
-            if (fsErr == null && error is CancellationException) throw error
-            val root = fsErr ?: error
-            Log.w("MNotesVM", "Error observing tasks", root)
-            emit(UiState.Error(root.message ?: "Failed to observe tasks"))
+            if (error is CancellationException) throw error
+            emit(UiState.Error(error.message ?: "Failed to load tasks"))
         }
         .stateIn(
             scope = viewModelScope,
@@ -84,16 +90,11 @@ class MNotesViewModel(
             initialValue = UiState.Loading
         )
 
-    val requestsState: StateFlow<UiState<List<QuickRequest>>> = repository.observeRequests(currentUserId)
+    val requestsState: StateFlow<UiState<List<QuickRequest>>> = localStore.requestsFlow
         .map<List<QuickRequest>, UiState<List<QuickRequest>>> { UiState.Success(it) }
         .catch { error ->
-            val fsErr = generateSequence(error) { it.cause }
-                .filterIsInstance<FirebaseFirestoreException>()
-                .firstOrNull()
-            if (fsErr == null && error is CancellationException) throw error
-            val root = fsErr ?: error
-            Log.w("MNotesVM", "Error observing requests", root)
-            emit(UiState.Error(root.message ?: "Failed to observe requests"))
+            if (error is CancellationException) throw error
+            emit(UiState.Error(error.message ?: "Failed to load requests"))
         }
         .stateIn(
             scope = viewModelScope,
@@ -123,8 +124,9 @@ class MNotesViewModel(
     val isBusyBackup: StateFlow<Boolean> = _isBusyBackup.asStateFlow()
 
     init {
+        auth.addAuthStateListener(authListener)
         viewModelScope.launch {
-            repository.ensureInitialized(currentUserId)
+            localStore.ensureInitialized()
         }
     }
 
@@ -146,10 +148,10 @@ class MNotesViewModel(
 
     fun updatePreference(updates: Map<String, Any>, triggerAutoBackup: Boolean = false) {
         viewModelScope.launch {
-            val res = repository.updatePreferences(currentUserId, updates)
+            val res = localStore.updatePreferences(updates)
             if (res.isFailure) {
                 _toastMessage.tryEmit(res.exceptionOrNull()?.localizedMessage ?: "Failed to update setting")
-            } else if (triggerAutoBackup && preferences.value.autoBackup) {
+            } else if (triggerAutoBackup && preferences.value.autoBackup && auth.currentUser != null) {
                 runCloudBackup(isAuto = true)
             }
         }
@@ -163,8 +165,7 @@ class MNotesViewModel(
             val rolled = AppStrings.nextWeekDay(task.weekDays, today)
             if (rolled != task.nextDueDate) {
                 viewModelScope.launch {
-                    repository.advanceTaskSchedule(
-                        userId = currentUserId,
+                    localStore.advanceTaskSchedule(
                         taskId = task.id,
                         cycleIndex = task.cycleIndex,
                         nextDueDate = rolled,
@@ -187,7 +188,7 @@ class MNotesViewModel(
         } ?: return
 
         viewModelScope.launch {
-            repository.markTaskAlerted(currentUserId, dueTask.id, today)
+            localStore.markTaskAlerted(dueTask.id, today)
             showAlert(dueTask, previewOnly = false)
         }
     }
@@ -204,7 +205,7 @@ class MNotesViewModel(
         val sample = (tasksState.value as? UiState.Success)?.data?.firstOrNull()
             ?: SmartTask(
                 id = "preview",
-                userId = currentUserId,
+                userId = "local",
                 title = if (preferences.value.lang == "en") "Gym Workout" else "تمرين الجيم",
                 meta = "11:00 PM",
                 repeatMode = RepeatMode.CYCLE.wire,
@@ -239,11 +240,10 @@ class MNotesViewModel(
                     val nextIdx = if (steps.isNotEmpty()) ((task.cycleIndex + 1L) % steps.size) else 0L
                     val tomorrow = AppStrings.addDaysStr(1)
                     val nextDate = if (task.usesWeekDays()) AppStrings.nextWeekDay(task.weekDays, tomorrow) else tomorrow
-                    repository.advanceTaskSchedule(currentUserId, task.id, nextIdx, nextDate, AppStrings.todayStr())
+                    localStore.advanceTaskSchedule(task.id, nextIdx, nextDate, AppStrings.todayStr())
                 }
                 RepeatMode.DAILY -> {
-                    repository.advanceTaskSchedule(
-                        currentUserId,
+                    localStore.advanceTaskSchedule(
                         task.id,
                         task.cycleIndex,
                         AppStrings.addDaysStr(1),
@@ -256,8 +256,7 @@ class MNotesViewModel(
                     } else {
                         AppStrings.addDaysStr(7)
                     }
-                    repository.advanceTaskSchedule(
-                        currentUserId,
+                    localStore.advanceTaskSchedule(
                         task.id,
                         task.cycleIndex,
                         nextDate,
@@ -265,12 +264,12 @@ class MNotesViewModel(
                     )
                 }
                 RepeatMode.NONE -> {
-                    repository.deleteTask(currentUserId, task.id)
+                    localStore.deleteTask(task.id)
                 }
             }
             if (result.isFailure) {
                 _toastMessage.tryEmit(result.exceptionOrNull()?.localizedMessage ?: "Failed to update task")
-            } else if (preferences.value.autoBackup) {
+            } else if (preferences.value.autoBackup && auth.currentUser != null) {
                 runCloudBackup(isAuto = true)
             }
         }
@@ -319,7 +318,7 @@ class MNotesViewModel(
 
         val payload = SmartTask(
             id = editingTask?.id ?: "",
-            userId = currentUserId,
+            userId = "local",
             title = cleanTitle,
             meta = finalMeta,
             imgUri = imgUri,
@@ -336,9 +335,9 @@ class MNotesViewModel(
 
         viewModelScope.launch {
             val res = if (editingTask != null && editingTask.id.isNotBlank()) {
-                repository.updateTaskFull(currentUserId, editingTask.id, payload).map { editingTask.id }
+                localStore.updateTaskFull(editingTask.id, payload).map { editingTask.id }
             } else {
-                repository.createTask(currentUserId, payload)
+                localStore.createTask(payload)
             }
             if (res.isFailure) {
                 _toastMessage.tryEmit(res.exceptionOrNull()?.localizedMessage ?: "Failed to save task")
@@ -347,7 +346,7 @@ class MNotesViewModel(
                     val savedId = res.getOrNull().orEmpty()
                     showAlert(payload.copy(id = savedId), previewOnly = false)
                 }
-                if (preferences.value.autoBackup) {
+                if (preferences.value.autoBackup && auth.currentUser != null) {
                     runCloudBackup(isAuto = true)
                 }
             }
@@ -357,7 +356,7 @@ class MNotesViewModel(
     fun updateTaskPhoto(taskId: String, imgUri: String) {
         playSound("done")
         viewModelScope.launch {
-            val res = repository.updateTaskPhoto(currentUserId, taskId, imgUri)
+            val res = localStore.updateTaskPhoto(taskId, imgUri)
             if (res.isFailure) {
                 _toastMessage.tryEmit(res.exceptionOrNull()?.localizedMessage ?: "Failed to update photo")
             }
@@ -367,10 +366,10 @@ class MNotesViewModel(
     fun deleteTask(taskId: String) {
         playSound("exit")
         viewModelScope.launch {
-            val res = repository.deleteTask(currentUserId, taskId)
+            val res = localStore.deleteTask(taskId)
             if (res.isFailure) {
                 _toastMessage.tryEmit(res.exceptionOrNull()?.localizedMessage ?: "Failed to delete task")
-            } else if (preferences.value.autoBackup) {
+            } else if (preferences.value.autoBackup && auth.currentUser != null) {
                 runCloudBackup(isAuto = true)
             }
         }
@@ -379,8 +378,7 @@ class MNotesViewModel(
     fun simulateTomorrow(task: SmartTask) {
         playSound("nav")
         viewModelScope.launch {
-            repository.advanceTaskSchedule(
-                userId = currentUserId,
+            localStore.advanceTaskSchedule(
                 taskId = task.id,
                 cycleIndex = task.cycleIndex,
                 nextDueDate = AppStrings.todayStr(),
@@ -396,10 +394,10 @@ class MNotesViewModel(
         playSound("done")
         val finalTitle = t.ifEmpty { AppStrings.get(preferences.value.lang, "reqTab") }
         viewModelScope.launch {
-            val res = repository.createRequest(currentUserId, finalTitle, b)
+            val res = localStore.createRequest(finalTitle, b)
             if (res.isFailure) {
                 _toastMessage.tryEmit(res.exceptionOrNull()?.localizedMessage ?: "Failed to save request")
-            } else if (preferences.value.autoBackup) {
+            } else if (preferences.value.autoBackup && auth.currentUser != null) {
                 runCloudBackup(isAuto = true)
             }
         }
@@ -408,7 +406,7 @@ class MNotesViewModel(
     fun deleteQuickRequest(requestId: String) {
         playSound("exit")
         viewModelScope.launch {
-            val res = repository.deleteRequest(currentUserId, requestId)
+            val res = localStore.deleteRequest(requestId)
             if (res.isFailure) {
                 _toastMessage.tryEmit(res.exceptionOrNull()?.localizedMessage ?: "Failed to delete request")
             }
@@ -560,7 +558,7 @@ class MNotesViewModel(
                 return@launch
             }
             _isBusyBackup.value = true
-            val res = repository.restoreFromSnapshot(currentUserId, parsed.getOrThrow())
+            val res = localStore.restoreFromSnapshot(parsed.getOrThrow())
             _isBusyBackup.value = false
             if (res.isSuccess) {
                 playSound("done")
@@ -572,20 +570,28 @@ class MNotesViewModel(
     }
 
     fun runCloudBackup(isAuto: Boolean = false) {
+        val user = auth.currentUser
+        val lang = preferences.value.lang
+        if (user == null) {
+            if (!isAuto) {
+                _toastMessage.tryEmit(AppStrings.get(lang, "connectGoogleFirst"))
+            }
+            return
+        }
         viewModelScope.launch {
             if (!isAuto) _isBusyBackup.value = true
-            val lang = preferences.value.lang
             val locale = if (lang == "ar") Locale.forLanguageTag("ar-EG") else Locale.US
             val nowLabel = SimpleDateFormat("yyyy-MM-dd HH:mm", locale).format(Date())
             val snap = buildBackupSnapshot()
+            val label = user.email?.takeIf { it.isNotBlank() } ?: user.uid
             val res = repository.saveCloudBackup(
-                userId = currentUserId,
-                accountLabel = userEmail.ifBlank { currentUserId },
+                userId = user.uid,
+                accountLabel = label,
                 clientTime = nowLabel,
                 payload = snap
             )
             if (res.isSuccess) {
-                repository.updatePreferences(currentUserId, mapOf("lastBackupLabel" to nowLabel))
+                localStore.updatePreferences(mapOf("lastBackupLabel" to nowLabel))
                 if (!isAuto) {
                     playSound("done")
                     _toastMessage.tryEmit(AppStrings.get(lang, "backupSaved"))
@@ -598,10 +604,15 @@ class MNotesViewModel(
     }
 
     fun restoreLatestCloudBackup() {
+        val user = auth.currentUser
+        val lang = preferences.value.lang
+        if (user == null) {
+            _toastMessage.tryEmit(AppStrings.get(lang, "connectGoogleFirst"))
+            return
+        }
         viewModelScope.launch {
             _isBusyBackup.value = true
-            val lang = preferences.value.lang
-            val fetched = repository.fetchLatestCloudBackup(currentUserId)
+            val fetched = repository.fetchLatestCloudBackup(user.uid)
             val record = fetched.getOrNull()
             if (fetched.isFailure) {
                 _toastMessage.tryEmit(fetched.exceptionOrNull()?.localizedMessage ?: "Restore failed")
@@ -612,7 +623,7 @@ class MNotesViewModel(
                     json.decodeFromString<BackupSnapshotPayload>(record.snapshotJson)
                 }
                 if (parsed.isSuccess) {
-                    val res = repository.restoreFromSnapshot(currentUserId, parsed.getOrThrow())
+                    val res = localStore.restoreFromSnapshot(parsed.getOrThrow())
                     if (res.isSuccess) {
                         playSound("done")
                         _toastMessage.tryEmit(AppStrings.get(lang, "backupRestored"))
@@ -629,6 +640,7 @@ class MNotesViewModel(
 
     override fun onCleared() {
         super.onCleared()
+        auth.removeAuthStateListener(authListener)
         soundEngine.stopRingtone()
     }
 }
