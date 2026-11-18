@@ -49,6 +49,7 @@ import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.ReceiptLong
 import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material.icons.rounded.TextFields
 import androidx.compose.material.icons.rounded.Upload
@@ -125,6 +126,7 @@ fun SettingsSheet(
     trimmedRingtones: List<TrimmedRingtone>,
     isBusyBackup: Boolean,
     viewModel: MNotesViewModel,
+    initialFolder: String? = null,
     onPickBannerPhoto: () -> Unit,
     onAddLibraryPhotoUri: (Uri, String) -> Unit,
     onShowToast: (String) -> Unit,
@@ -138,7 +140,7 @@ fun SettingsSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val connectedEmail by viewModel.connectedEmail.collectAsStateWithLifecycle()
 
-    var openFolder by remember { mutableStateOf<String?>(null) }
+    var openFolder by remember(initialFolder) { mutableStateOf(initialFolder) }
     var openSubSection by remember { mutableStateOf<String?>(null) }
     var isLinkingGoogle by remember { mutableStateOf(false) }
     var googleLinkError by remember { mutableStateOf<String?>(null) }
@@ -609,7 +611,7 @@ fun SettingsSheet(
                         ) {
                             MediaAvatarSlot(
                                 imgUri = prefs.bannerImg,
-                                size = bannerImageDp(prefs.bannerImgSize),
+                                size = bannerImageDp(prefs.bannerImgSize, prefs.bannerImgDp),
                                 shapeId = prefs.bannerPhotoShape,
                                 useBannerDefaultIfBlank = true,
                                 contentDescription = prefs.bannerTitle
@@ -629,18 +631,15 @@ fun SettingsSheet(
                         }
 
                         Spacer(Modifier.height(10.dp))
-                        SectionMiniLabel(AppStrings.get(lang, "banSize"))
-                        ChoicePillRow(
-                            options = listOf(
-                                "small" to AppStrings.get(lang, "szS"),
-                                "medium" to AppStrings.get(lang, "szM"),
-                                "large" to AppStrings.get(lang, "szL")
-                            ),
-                            selectedId = prefs.bannerImgSize,
-                            onSelect = {
-                                viewModel.playSound("nav")
-                                viewModel.updatePreference(mapOf("bannerImgSize" to it))
-                            }
+                        SizeControlSliderRow(
+                            title = AppStrings.get(lang, "banSize"),
+                            value = prefs.bannerImgDp.toFloat(),
+                            valueRange = 28f..170f,
+                            unitSuffix = "dp",
+                            defaultValue = 54,
+                            lang = lang,
+                            testTag = "slider_banner_img_dp",
+                            onValueCommitted = { viewModel.updatePreference(mapOf("bannerImgDp" to it)) }
                         )
 
                         Spacer(Modifier.height(10.dp))
@@ -682,22 +681,44 @@ fun SettingsSheet(
                             lang = lang,
                             cardShape = prefs.cardShape,
                             taskImgSize = prefs.taskImgSize,
+                            taskImgDp = prefs.taskImgDp,
                             isDemo = true
                         )
 
                         Spacer(Modifier.height(10.dp))
-                        SectionMiniLabel(AppStrings.get(lang, "taskSize"))
-                        ChoicePillRow(
-                            options = listOf(
-                                "small" to AppStrings.get(lang, "szS"),
-                                "medium" to AppStrings.get(lang, "szM"),
-                                "large" to AppStrings.get(lang, "szL")
-                            ),
-                            selectedId = prefs.taskImgSize,
-                            onSelect = {
-                                viewModel.playSound("nav")
-                                viewModel.updatePreference(mapOf("taskImgSize" to it))
-                            }
+                        SizeControlSliderRow(
+                            title = AppStrings.get(lang, "taskSize"),
+                            value = prefs.taskImgDp.toFloat(),
+                            valueRange = 28f..150f,
+                            unitSuffix = "dp",
+                            defaultValue = 48,
+                            lang = lang,
+                            testTag = "slider_task_img_dp",
+                            onValueCommitted = { viewModel.updatePreference(mapOf("taskImgDp" to it)) }
+                        )
+
+                        Spacer(Modifier.height(8.dp))
+                        SizeControlSliderRow(
+                            title = if (lang == "en") "Card Height & Spacing" else "ارتفاع البطاقة والمسافات",
+                            value = prefs.cardScalePercent.toFloat(),
+                            valueRange = 80f..160f,
+                            unitSuffix = "%",
+                            defaultValue = 100,
+                            lang = lang,
+                            testTag = "slider_card_scale_pct",
+                            onValueCommitted = { viewModel.updatePreference(mapOf("cardScalePercent" to it)) }
+                        )
+
+                        Spacer(Modifier.height(8.dp))
+                        SizeControlSliderRow(
+                            title = if (lang == "en") "Alert Photo Size" else "حجم الصورة في التنبيه",
+                            value = prefs.alertImgDp.toFloat(),
+                            valueRange = 44f..220f,
+                            unitSuffix = "dp",
+                            defaultValue = 120,
+                            lang = lang,
+                            testTag = "slider_alert_img_dp",
+                            onValueCommitted = { viewModel.updatePreference(mapOf("alertImgDp" to it)) }
                         )
 
                         Spacer(Modifier.height(10.dp))
@@ -754,62 +775,18 @@ fun SettingsSheet(
                         }
 
                         Spacer(Modifier.height(12.dp))
-                        SectionMiniLabel("3D")
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            MNotesCatalog.pixel3dPhotos.chunked(2).forEach { rowItems ->
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    rowItems.forEach { item ->
-                                        val label = if (lang == "en") item.nameEn else item.nameAr
-                                        val isBanner = prefs.bannerImg == item.uri
-                                        Surface(
-                                            shape = RoundedCornerShape(16.dp),
-                                            color = if (isBanner) colors.primarySoft else colors.bgMain,
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .border(
-                                                    1.5.dp,
-                                                    if (isBanner) colors.primary else colors.borderSoft,
-                                                    RoundedCornerShape(16.dp)
-                                                )
-                                                .clickable {
-                                                    viewModel.playSound("done")
-                                                    viewModel.updatePreference(mapOf("bannerImg" to item.uri))
-                                                }
-                                        ) {
-                                            Column(
-                                                modifier = Modifier.padding(8.dp),
-                                                horizontalAlignment = Alignment.CenterHorizontally,
-                                                verticalArrangement = Arrangement.spacedBy(6.dp)
-                                            ) {
-                                                MNotesPhotoContent(
-                                                    imgUri = item.uri,
-                                                    useBannerDefaultIfBlank = false,
-                                                    contentDescription = label,
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .height(120.dp)
-                                                        .clip(RoundedCornerShape(12.dp))
-                                                )
-                                                Text(
-                                                    text = label,
-                                                    color = colors.textDark,
-                                                    fontSize = 11.5.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
-                                            }
-                                        }
-                                    }
-                                    if (rowItems.size == 1) {
-                                        Spacer(Modifier.weight(1f))
-                                    }
-                                }
+                        SectionMiniLabel(if (lang == "en") "Built-in Photo Folders" else "مجلدات صور البرنامج المصنفة")
+                        CategorizedBuiltInPhotosBrowser(
+                            lang = lang,
+                            selectedUri = prefs.bannerImg,
+                            columns = 3,
+                            defaultCategory = "fruits",
+                            showLabels = true,
+                            onSelectUri = { uri ->
+                                viewModel.playSound("done")
+                                viewModel.updatePreference(mapOf("bannerImg" to uri))
                             }
-                        }
+                        )
 
                         if (libraryPhotos.isNotEmpty()) {
                             Spacer(Modifier.height(10.dp))
@@ -828,8 +805,8 @@ fun SettingsSheet(
                                         ) {
                                             MediaAvatarSlot(
                                                 imgUri = photo.filePath,
-                                                size = 40.dp,
-                                                shapeId = "ios",
+                                                size = 44.dp,
+                                                shapeId = "circle",
                                                 contentDescription = photo.name
                                             )
                                             Spacer(Modifier.width(10.dp))
@@ -1329,6 +1306,33 @@ fun SettingsSheet(
                 }
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SizeControlSliderRow(
+                        title = if (lang == "en") "Text Size Across App & Home" else "شريط تكبير وتصغير الكتابة في البرنامج",
+                        value = prefs.textScalePercent.toFloat(),
+                        valueRange = 75f..185f,
+                        unitSuffix = "%",
+                        defaultValue = 100,
+                        lang = lang,
+                        testTag = "slider_font_text_scale",
+                        onValueCommitted = { viewModel.updatePreference(mapOf("textScalePercent" to it)) }
+                    )
+
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = colors.bgMain,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, colors.borderSoft, RoundedCornerShape(14.dp))
+                    ) {
+                        Text(
+                            text = if (lang == "en") "Live Font Size Sample — M Notes" else "معاينة حية لحجم الكتابة الآن — مهامك اليومية",
+                            color = colors.textDark,
+                            fontSize = (13.5f * (prefs.textScalePercent / 100f)).sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+                        )
+                    }
+
                     SettingsSubAccordion(
                         title = AppStrings.get(lang, "sWeight"),
                         isOpen = openSubSection == "weight",
@@ -1468,6 +1472,17 @@ fun SettingsSheet(
                         }
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            SizeControlSliderRow(
+                                title = if (lang == "en") "Alert Avatar Photo Size" else "حجم الصورة داخل إشعار التنبيه",
+                                value = prefs.alertImgDp.toFloat(),
+                                valueRange = 44f..220f,
+                                unitSuffix = "dp",
+                                defaultValue = 120,
+                                lang = lang,
+                                testTag = "slider_alerts_tab_img_dp",
+                                onValueCommitted = { viewModel.updatePreference(mapOf("alertImgDp" to it)) }
+                            )
+                            Spacer(Modifier.height(4.dp))
                             MNotesCatalog.alertStyles.forEach { opt ->
                                 SettingsPlaySwitchRow(
                                     title = "${opt.id} • ${if (lang == "en") opt.nameEn else opt.nameAr}",
@@ -1819,6 +1834,25 @@ fun SettingsSheet(
                 }
             ) {
                 ExternalAppIconFolderContent(
+                    prefs = prefs,
+                    lang = lang,
+                    viewModel = viewModel
+                )
+            }
+
+            // 10. Dedicated Requests, Invoices, Cheques & Orders Folder
+            SettingsFolder(
+                title = if (lang == "en") "Requests, Invoices & Cheques" else "ضبط صفحة الطلبات والفواتير والشيكات",
+                subtitle = if (lang == "en") "Signature, stamps, red/green dots, word split & toggles" else "التوقيع والأختام وتقسيم الكلام وقائمة الأوردرات",
+                icon = Icons.Rounded.ReceiptLong,
+                isOpen = openFolder == "requests",
+                lang = lang,
+                onToggle = {
+                    viewModel.playSound("nav")
+                    openFolder = if (openFolder == "requests") null else "requests"
+                }
+            ) {
+                RequestsSettingsFolderContent(
                     prefs = prefs,
                     lang = lang,
                     viewModel = viewModel

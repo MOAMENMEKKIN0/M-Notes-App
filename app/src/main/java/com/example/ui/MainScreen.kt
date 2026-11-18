@@ -23,20 +23,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -58,22 +52,23 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.localization.AppStrings
-import com.example.model.QuickRequest
 import com.example.model.SmartTask
 import com.example.ui.components.AlertOverlay
+import com.example.ui.components.HomeQuickOverviewSheet
 import com.example.ui.components.PhotoCropSheet
 import com.example.ui.components.PhotoPickerSheet
+import com.example.ui.components.RequestsWorkspace
 import com.example.ui.components.SettingsSheet
 import com.example.ui.components.TaskEditorSheet
 import com.example.ui.components.TasksWorkspaceRouter
 import com.example.ui.components.TopBarSwitcher
 import com.example.ui.theme.LocalMNotesColors
+import com.example.ui.theme.LocalMNotesTextScale
 import com.example.ui.theme.motionStiffnessForHz
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -104,6 +99,7 @@ fun MainScreen(viewModel: MNotesViewModel) {
     val isBusyBackup by viewModel.isBusyBackup.collectAsStateWithLifecycle()
 
     val colors = LocalMNotesColors.current
+    val textScale = LocalMNotesTextScale.current
     val lang = prefs.lang
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -114,6 +110,9 @@ fun MainScreen(viewModel: MNotesViewModel) {
     // Navigation & Modal States
     val pagerState = rememberPagerState(initialPage = 0, pageCount = { 2 })
     var showSettings by remember { mutableStateOf(false) }
+    var initialSettingsFolder by remember { mutableStateOf<String?>(null) }
+    var showHomeOverview by remember { mutableStateOf(false) }
+    var overviewDayFilter by remember { mutableStateOf<Int?>(null) }
     var showTaskEditor by remember { mutableStateOf(false) }
     var editingTask by remember { mutableStateOf<SmartTask?>(null) }
     var editorDraftImgUri by remember { mutableStateOf("") }
@@ -121,10 +120,6 @@ fun MainScreen(viewModel: MNotesViewModel) {
     var photoPickTarget by remember { mutableStateOf<PhotoPickTarget?>(null) }
     var cropSourceUri by remember { mutableStateOf<Uri?>(null) }
     var cropDestination by remember { mutableStateOf<CropDestination?>(null) }
-
-    // Requests Tab Input States
-    var reqTitle by remember { mutableStateOf("") }
-    var reqBody by remember { mutableStateOf("") }
 
     // Observe transient toast messages
     LaunchedEffect(Unit) {
@@ -181,8 +176,15 @@ fun MainScreen(viewModel: MNotesViewModel) {
                             Text(
                                 text = AppStrings.get(lang, "appName"),
                                 color = colors.textDark,
-                                fontSize = 21.sp,
-                                fontWeight = FontWeight.ExtraBold
+                                fontSize = (21f * textScale).sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .clickable {
+                                        viewModel.playSound("enter")
+                                        initialSettingsFolder = "homeLayout"
+                                        showSettings = true
+                                    }
                             )
 
                             Row(
@@ -199,6 +201,7 @@ fun MainScreen(viewModel: MNotesViewModel) {
                                         .clip(CircleShape)
                                         .clickable {
                                             viewModel.playSound("enter")
+                                            initialSettingsFolder = null
                                             showSettings = true
                                         }
                                         .testTag("settings_button")
@@ -287,6 +290,11 @@ fun MainScreen(viewModel: MNotesViewModel) {
                                         viewModel.playSound("enter")
                                         photoPickTarget = PhotoPickTarget.Banner
                                     },
+                                    onBannerBodyClick = {
+                                        viewModel.playSound("enter")
+                                        initialSettingsFolder = "homeLayout"
+                                        showSettings = true
+                                    },
                                     onAddTaskClick = {
                                         viewModel.playSound("enter")
                                         editingTask = null
@@ -308,241 +316,37 @@ fun MainScreen(viewModel: MNotesViewModel) {
                                     },
                                     onPreviewTaskAlert = { task ->
                                         viewModel.showAlert(task, previewOnly = true)
+                                    },
+                                    onOpenOverview = { dayIdx ->
+                                        viewModel.playSound("enter")
+                                        overviewDayFilter = dayIdx
+                                        showHomeOverview = true
+                                    },
+                                    onOpenRequestsPage = {
+                                        viewModel.playSound("nav")
+                                        scope.launch {
+                                            pagerState.animateScrollToPage(
+                                                page = 1,
+                                                animationSpec = spring(
+                                                    dampingRatio = Spring.DampingRatioNoBouncy,
+                                                    stiffness = motionStiffnessForHz(prefs.refreshRateHz)
+                                                )
+                                            )
+                                        }
                                     }
                                 )
                             } else {
-                                // Page 1: Requests
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .verticalScroll(rememberScrollState()),
-                                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    // Create Request Card
-                                    Surface(
-                                        shape = RoundedCornerShape(22.dp),
-                                        color = colors.cardBg,
-                                        shadowElevation = 2.dp,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .border(1.dp, colors.borderSoft, RoundedCornerShape(22.dp))
-                                    ) {
-                                        Column(
-                                            modifier = Modifier.padding(14.dp),
-                                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                                        ) {
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Text(
-                                                    text = AppStrings.get(lang, "reqHead"),
-                                                    color = colors.textDark,
-                                                    fontSize = 14.5.sp,
-                                                    fontWeight = FontWeight.ExtraBold
-                                                )
-                                                Box(
-                                                    modifier = Modifier
-                                                        .clip(RoundedCornerShape(999.dp))
-                                                        .background(colors.primarySoft)
-                                                        .padding(horizontal = 10.dp, vertical = 4.dp)
-                                                ) {
-                                                    Text(
-                                                        text = "${allRequests.size} ${AppStrings.get(lang, "reqSaved")}",
-                                                        color = colors.primary,
-                                                        fontSize = 11.5.sp,
-                                                        fontWeight = FontWeight.ExtraBold
-                                                    )
-                                                }
-                                            }
-
-                                            OutlinedTextField(
-                                                value = reqTitle,
-                                                onValueChange = { reqTitle = it },
-                                                placeholder = {
-                                                    Text(AppStrings.get(lang, "reqTitlePh"), color = colors.textMuted, fontSize = 13.sp)
-                                                },
-                                                singleLine = true,
-                                                shape = RoundedCornerShape(14.dp),
-                                                colors = OutlinedTextFieldDefaults.colors(
-                                                    focusedBorderColor = colors.primary,
-                                                    unfocusedBorderColor = colors.borderSoft,
-                                                    focusedContainerColor = colors.bgMain,
-                                                    unfocusedContainerColor = colors.bgMain
-                                                ),
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .testTag("request_title_input")
-                                            )
-
-                                            OutlinedTextField(
-                                                value = reqBody,
-                                                onValueChange = { reqBody = it },
-                                                placeholder = {
-                                                    Text(AppStrings.get(lang, "reqBodyPh"), color = colors.textMuted, fontSize = 13.sp)
-                                                },
-                                                minLines = 3,
-                                                maxLines = 6,
-                                                shape = RoundedCornerShape(14.dp),
-                                                colors = OutlinedTextFieldDefaults.colors(
-                                                    focusedBorderColor = colors.primary,
-                                                    unfocusedBorderColor = colors.borderSoft,
-                                                    focusedContainerColor = colors.bgMain,
-                                                    unfocusedContainerColor = colors.bgMain
-                                                ),
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .testTag("request_body_input")
-                                            )
-
-                                            Button(
-                                                onClick = {
-                                                    if (reqTitle.trim().isNotEmpty() || reqBody.trim().isNotEmpty()) {
-                                                        viewModel.saveQuickRequest(reqTitle, reqBody)
-                                                        reqTitle = ""
-                                                        reqBody = ""
-                                                    }
-                                                },
-                                                enabled = reqTitle.trim().isNotEmpty() || reqBody.trim().isNotEmpty(),
-                                                shape = RoundedCornerShape(14.dp),
-                                                colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .height(48.dp)
-                                                    .testTag("save_request_button")
-                                            ) {
-                                                Text(
-                                                    text = AppStrings.get(lang, "saveReq"),
-                                                    fontWeight = FontWeight.Bold,
-                                                    fontSize = 13.5.sp
-                                                )
-                                            }
-                                        }
+                                // Page 1: Rich Requests, Invoices, Cheques, Cards & Orders
+                                RequestsWorkspace(
+                                    prefs = prefs,
+                                    allRequests = allRequests,
+                                    requestsState = requestsState,
+                                    viewModel = viewModel,
+                                    onOpenRequestsSettings = {
+                                        initialSettingsFolder = "requests"
+                                        showSettings = true
                                     }
-
-                                    // Saved Requests Card
-                                    Surface(
-                                        shape = RoundedCornerShape(22.dp),
-                                        color = colors.cardBg,
-                                        shadowElevation = 2.dp,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .border(1.dp, colors.borderSoft, RoundedCornerShape(22.dp))
-                                    ) {
-                                        Column(
-                                            modifier = Modifier.padding(14.dp),
-                                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                                        ) {
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Text(
-                                                    text = AppStrings.get(lang, "reqTab"),
-                                                    color = colors.textDark,
-                                                    fontSize = 14.5.sp,
-                                                    fontWeight = FontWeight.ExtraBold
-                                                )
-                                                Text(
-                                                    text = "${allRequests.size}",
-                                                    color = colors.textMuted,
-                                                    fontSize = 12.sp,
-                                                    fontWeight = FontWeight.Bold
-                                                )
-                                            }
-
-                                            when (val rState = requestsState) {
-                                                is UiState.Loading -> {
-                                                    Box(
-                                                        modifier = Modifier
-                                                            .fillMaxWidth()
-                                                            .padding(20.dp),
-                                                        contentAlignment = Alignment.Center
-                                                    ) {
-                                                        CircularProgressIndicator(color = colors.primary)
-                                                    }
-                                                }
-                                                is UiState.Error -> {
-                                                    Text(
-                                                        text = rState.message,
-                                                        color = Color(0xFFEF4444),
-                                                        fontSize = 12.5.sp
-                                                    )
-                                                }
-                                                is UiState.Success -> {
-                                                    if (allRequests.isEmpty()) {
-                                                        Text(
-                                                            text = AppStrings.get(lang, "noReq"),
-                                                            color = colors.textMuted,
-                                                            fontSize = 12.5.sp,
-                                                            textAlign = TextAlign.Center,
-                                                            modifier = Modifier
-                                                                .fillMaxWidth()
-                                                                .padding(vertical = 20.dp)
-                                                        )
-                                                    } else {
-                                                        allRequests.forEach { req: QuickRequest ->
-                                                            Surface(
-                                                                shape = RoundedCornerShape(16.dp),
-                                                                color = colors.bgMain,
-                                                                modifier = Modifier
-                                                                    .fillMaxWidth()
-                                                                    .border(1.dp, colors.borderSoft, RoundedCornerShape(16.dp))
-                                                            ) {
-                                                                Row(
-                                                                    modifier = Modifier
-                                                                        .fillMaxWidth()
-                                                                        .padding(12.dp),
-                                                                    verticalAlignment = Alignment.CenterVertically
-                                                                ) {
-                                                                    Column(modifier = Modifier.weight(1f)) {
-                                                                        Text(
-                                                                            text = req.title,
-                                                                            color = colors.textDark,
-                                                                            fontSize = 13.5.sp,
-                                                                            fontWeight = FontWeight.ExtraBold
-                                                                        )
-                                                                        if (req.body.isNotBlank()) {
-                                                                            Spacer(Modifier.height(2.dp))
-                                                                            Text(
-                                                                                text = req.body,
-                                                                                color = colors.textMuted,
-                                                                                fontSize = 12.sp
-                                                                            )
-                                                                        }
-                                                                    }
-                                                                    Spacer(Modifier.width(8.dp))
-                                                                    Box(
-                                                                        modifier = Modifier
-                                                                            .size(34.dp)
-                                                                            .clip(CircleShape)
-                                                                            .background(colors.cardBg)
-                                                                            .border(1.dp, Color(0xFFFEE2E2), CircleShape)
-                                                                            .clickable {
-                                                                                viewModel.deleteQuickRequest(req.id)
-                                                                            }
-                                                                            .testTag("delete_request_${req.id}"),
-                                                                        contentAlignment = Alignment.Center
-                                                                    ) {
-                                                                        Icon(
-                                                                            imageVector = Icons.Rounded.DeleteOutline,
-                                                                            contentDescription = "Delete",
-                                                                            tint = Color(0xFFEF4444),
-                                                                            modifier = Modifier.size(16.dp)
-                                                                        )
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                    Spacer(Modifier.height(14.dp))
-                                }
+                                )
                             }
                         }
                     }
@@ -556,6 +360,8 @@ fun MainScreen(viewModel: MNotesViewModel) {
                     draftImgUri = editorDraftImgUri,
                     lang = lang,
                     libraryPhotos = libraryPhotos,
+                    trimmedRingtones = trimmedRingtones,
+                    onPreviewRingtone = { ringId -> viewModel.previewRingtoneId(ringId) },
                     onPickAndCropPhoto = { uri ->
                         cropDestination = CropDestination.EditorDraft
                         cropSourceUri = uri
@@ -564,7 +370,7 @@ fun MainScreen(viewModel: MNotesViewModel) {
                         viewModel.playSound("nav")
                         editorDraftImgUri = path
                     },
-                    onSave = { title, meta, startDate, alertTime, repeatMode, cycleRaw, weekDays, alertEnabled, imgUri, testAlert ->
+                    onSave = { title, meta, startDate, alertTime, repeatMode, cycleRaw, weekDays, alertEnabled, imgUri, ringId, testAlert ->
                         viewModel.saveTask(
                             editingTask = editingTask,
                             title = title,
@@ -576,6 +382,7 @@ fun MainScreen(viewModel: MNotesViewModel) {
                             weekDays = weekDays,
                             alertEnabled = alertEnabled,
                             imgUri = imgUri,
+                            ringId = ringId,
                             triggerAlertAfterSave = testAlert
                         )
                         showTaskEditor = false
@@ -676,6 +483,51 @@ fun MainScreen(viewModel: MNotesViewModel) {
                 )
             }
 
+            // Quick Home Overview Sheet (opened by Progress Circle, Day Strip, Countdown, etc.)
+            if (showHomeOverview) {
+                val dueTodayCount = allTasks.count { it.isActiveOnDate() }
+                HomeQuickOverviewSheet(
+                    lang = lang,
+                    dueTodayCount = dueTodayCount,
+                    allTasks = allTasks,
+                    selectedDayFilter = overviewDayFilter,
+                    requestsCount = allRequests.size,
+                    onEditTask = { task ->
+                        editingTask = task
+                        editorDraftImgUri = task.imgUri
+                        showTaskEditor = true
+                    },
+                    onPreviewAlert = { task ->
+                        viewModel.showAlert(task, previewOnly = true)
+                    },
+                    onAddTask = {
+                        editingTask = null
+                        editorDraftImgUri = ""
+                        showTaskEditor = true
+                    },
+                    onOpenRequestsPage = {
+                        viewModel.playSound("nav")
+                        scope.launch {
+                            pagerState.animateScrollToPage(
+                                page = 1,
+                                animationSpec = spring(
+                                    dampingRatio = Spring.DampingRatioNoBouncy,
+                                    stiffness = motionStiffnessForHz(prefs.refreshRateHz)
+                                )
+                            )
+                        }
+                    },
+                    onOpenHomeSettings = {
+                        initialSettingsFolder = "homeLayout"
+                        showSettings = true
+                    },
+                    onDismiss = {
+                        viewModel.playSound("exit")
+                        showHomeOverview = false
+                    }
+                )
+            }
+
             // Settings Sheet
             if (showSettings) {
                 SettingsSheet(
@@ -685,6 +537,7 @@ fun MainScreen(viewModel: MNotesViewModel) {
                     trimmedRingtones = trimmedRingtones,
                     isBusyBackup = isBusyBackup,
                     viewModel = viewModel,
+                    initialFolder = initialSettingsFolder,
                     onPickBannerPhoto = {
                         photoPickTarget = PhotoPickTarget.Banner
                     },
@@ -708,6 +561,7 @@ fun MainScreen(viewModel: MNotesViewModel) {
                 AlertOverlay(
                     task = alertTask,
                     alertStyle = prefs.alertStyle,
+                    alertImgDp = prefs.alertImgDp,
                     lang = lang,
                     onComplete = { viewModel.completeActiveAlert() },
                     onDismiss = { viewModel.dismissAlert() }

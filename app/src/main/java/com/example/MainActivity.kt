@@ -101,6 +101,8 @@ private fun MNotesAppRoot() {
         fontId = prefs.fontId,
         fontWeightValue = prefs.fontWeight,
         refreshRateHz = prefs.refreshRateHz,
+        textScalePercent = prefs.textScalePercent,
+        cardScalePercent = prefs.cardScalePercent,
         customPrimaryHex = prefs.customPrimaryHex,
         customBgHex = prefs.customBgHex,
         customAccentHex = prefs.customAccentHex

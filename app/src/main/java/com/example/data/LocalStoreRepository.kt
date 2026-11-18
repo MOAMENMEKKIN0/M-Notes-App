@@ -37,6 +37,7 @@ private data class LocalTaskDto(
     val alertTime: String = "",
     val nextDueDate: String = "",
     val lastAlertedDate: String = "",
+    val ringId: String = "",
     val sortOrder: Long = 0L
 )
 
@@ -45,6 +46,16 @@ private data class LocalRequestDto(
     val id: String,
     val title: String,
     val body: String = "",
+    val docType: String = "invoice",
+    val customerName: String = "",
+    val amountText: String = "",
+    val stampId: String = "none",
+    val isSigned: Boolean = false,
+    val signatureName: String = "",
+    val statusDot: String = "none",
+    val statusLabel: String = "",
+    val splitMode: String = "full",
+    val isChecklistOrder: Boolean = false,
     val createdAtMs: Long = 0L
 )
 
@@ -88,8 +99,13 @@ class LocalStoreRepository(private val context: Context) {
             bannerSub = p.bannerSub,
             bannerImg = state.bannerImg,
             bannerImgSize = p.bannerImgSize,
+            bannerImgDp = p.bannerImgDp,
             bannerPhotoShape = p.bannerPhotoShape,
             taskImgSize = p.taskImgSize,
+            taskImgDp = p.taskImgDp,
+            alertImgDp = p.alertImgDp,
+            textScalePercent = p.textScalePercent,
+            cardScalePercent = p.cardScalePercent,
             cardShape = p.cardShape,
             showBanner = p.showBanner,
             showTopBarTabs = p.showTopBarTabs,
@@ -115,7 +131,25 @@ class LocalStoreRepository(private val context: Context) {
             refreshRateHz = p.refreshRateHz,
             layoutStyle = p.layoutStyle,
             appIconId = p.appIconId,
-            lastBackupLabel = state.lastBackupLabel
+            lastBackupLabel = state.lastBackupLabel,
+            reqSignatureName = p.reqSignatureName,
+            reqDefaultDocType = p.reqDefaultDocType,
+            reqDefaultSplitMode = p.reqDefaultSplitMode,
+            reqDefaultStatusLabel = p.reqDefaultStatusLabel,
+            reqCustomStatuses = p.reqCustomStatuses,
+            reqAutoSignOnComplete = p.reqAutoSignOnComplete,
+            reqShowDocTabs = p.reqShowDocTabs,
+            reqShowStamps = p.reqShowStamps,
+            reqShowSignature = p.reqShowSignature,
+            reqShowSplitControls = p.reqShowSplitControls,
+            reqShowOrdersSection = p.reqShowOrdersSection,
+            reqShowRedGreenDots = p.reqShowRedGreenDots,
+            reqShowStatusBadge = p.reqShowStatusBadge,
+            reqShowCustomer = p.reqShowCustomer,
+            reqShowAmount = p.reqShowAmount,
+            reqShowDate = p.reqShowDate,
+            reqShowHeaderBadge = p.reqShowHeaderBadge,
+            reqDefaultStampId = p.reqDefaultStampId
         )
     }
 
@@ -137,6 +171,7 @@ class LocalStoreRepository(private val context: Context) {
                     alertTime = it.alertTime,
                     nextDueDate = it.nextDueDate,
                     lastAlertedDate = it.lastAlertedDate,
+                    ringId = it.ringId,
                     sortOrder = it.sortOrder
                 )
             }
@@ -150,7 +185,17 @@ class LocalStoreRepository(private val context: Context) {
                     id = it.id,
                     userId = "local",
                     title = it.title,
-                    body = it.body
+                    body = it.body,
+                    docType = it.docType,
+                    customerName = it.customerName,
+                    amountText = it.amountText,
+                    stampId = it.stampId,
+                    isSigned = it.isSigned,
+                    signatureName = it.signatureName,
+                    statusDot = it.statusDot,
+                    statusLabel = it.statusLabel,
+                    splitMode = it.splitMode,
+                    isChecklistOrder = it.isChecklistOrder
                 )
             }
     }
@@ -214,8 +259,23 @@ class LocalStoreRepository(private val context: Context) {
                 "bannerSub" -> (v as? String)?.let { p = p.copy(bannerSub = it.take(200)) }
                 "bannerImg" -> (v as? String)?.let { bannerImg = it.take(2000) }
                 "bannerImgSize" -> (v as? String)?.let { p = p.copy(bannerImgSize = it) }
+                "bannerImgDp" -> (v as? Number)?.toInt()?.let {
+                    p = p.copy(bannerImgDp = it.coerceIn(28, 170))
+                }
                 "bannerPhotoShape" -> (v as? String)?.let { p = p.copy(bannerPhotoShape = it) }
                 "taskImgSize" -> (v as? String)?.let { p = p.copy(taskImgSize = it) }
+                "taskImgDp" -> (v as? Number)?.toInt()?.let {
+                    p = p.copy(taskImgDp = it.coerceIn(28, 150))
+                }
+                "alertImgDp" -> (v as? Number)?.toInt()?.let {
+                    p = p.copy(alertImgDp = it.coerceIn(44, 220))
+                }
+                "textScalePercent" -> (v as? Number)?.toInt()?.let {
+                    p = p.copy(textScalePercent = it.coerceIn(75, 185))
+                }
+                "cardScalePercent" -> (v as? Number)?.toInt()?.let {
+                    p = p.copy(cardScalePercent = it.coerceIn(80, 160))
+                }
                 "cardShape" -> (v as? String)?.let { p = p.copy(cardShape = it) }
                 "showBanner" -> (v as? Boolean)?.let { p = p.copy(showBanner = it) }
                 "showTopBarTabs" -> (v as? Boolean)?.let { p = p.copy(showTopBarTabs = it) }
@@ -246,6 +306,28 @@ class LocalStoreRepository(private val context: Context) {
                 }
                 "appIconId" -> (v as? String)?.let { p = p.copy(appIconId = it.take(12)) }
                 "lastBackupLabel" -> (v as? String)?.let { lastBackupLabel = it.take(100) }
+                "reqSignatureName" -> (v as? String)?.let { p = p.copy(reqSignatureName = it.take(80)) }
+                "reqDefaultDocType" -> (v as? String)?.takeIf { it in setOf("invoice", "cheque", "card") }?.let {
+                    p = p.copy(reqDefaultDocType = it)
+                }
+                "reqDefaultSplitMode" -> (v as? String)?.takeIf { it in setOf("word_1", "word_2", "full") }?.let {
+                    p = p.copy(reqDefaultSplitMode = it)
+                }
+                "reqDefaultStatusLabel" -> (v as? String)?.let { p = p.copy(reqDefaultStatusLabel = it.take(60)) }
+                "reqCustomStatuses" -> (v as? String)?.let { p = p.copy(reqCustomStatuses = it.take(500)) }
+                "reqAutoSignOnComplete" -> (v as? Boolean)?.let { p = p.copy(reqAutoSignOnComplete = it) }
+                "reqShowDocTabs" -> (v as? Boolean)?.let { p = p.copy(reqShowDocTabs = it) }
+                "reqShowStamps" -> (v as? Boolean)?.let { p = p.copy(reqShowStamps = it) }
+                "reqShowSignature" -> (v as? Boolean)?.let { p = p.copy(reqShowSignature = it) }
+                "reqShowSplitControls" -> (v as? Boolean)?.let { p = p.copy(reqShowSplitControls = it) }
+                "reqShowOrdersSection" -> (v as? Boolean)?.let { p = p.copy(reqShowOrdersSection = it) }
+                "reqShowRedGreenDots" -> (v as? Boolean)?.let { p = p.copy(reqShowRedGreenDots = it) }
+                "reqShowStatusBadge" -> (v as? Boolean)?.let { p = p.copy(reqShowStatusBadge = it) }
+                "reqShowCustomer" -> (v as? Boolean)?.let { p = p.copy(reqShowCustomer = it) }
+                "reqShowAmount" -> (v as? Boolean)?.let { p = p.copy(reqShowAmount = it) }
+                "reqShowDate" -> (v as? Boolean)?.let { p = p.copy(reqShowDate = it) }
+                "reqShowHeaderBadge" -> (v as? Boolean)?.let { p = p.copy(reqShowHeaderBadge = it) }
+                "reqDefaultStampId" -> (v as? String)?.let { p = p.copy(reqDefaultStampId = it.take(30)) }
             }
         }
         state.copy(
@@ -272,6 +354,7 @@ class LocalStoreRepository(private val context: Context) {
                 alertTime = task.alertTime.take(10),
                 nextDueDate = task.nextDueDate.take(20),
                 lastAlertedDate = task.lastAlertedDate.take(20),
+                ringId = task.ringId.take(100),
                 sortOrder = task.sortOrder
             )
             state.copy(initialized = true, tasks = listOf(dto) + state.tasks)
@@ -295,7 +378,8 @@ class LocalStoreRepository(private val context: Context) {
                     alertEnabled = task.alertEnabled,
                     alertTime = task.alertTime.take(10),
                     nextDueDate = task.nextDueDate.take(20),
-                    lastAlertedDate = task.lastAlertedDate.take(20)
+                    lastAlertedDate = task.lastAlertedDate.take(20),
+                    ringId = task.ringId.take(100)
                 )
             } else existing
         }
@@ -338,16 +422,69 @@ class LocalStoreRepository(private val context: Context) {
         state.copy(tasks = state.tasks.filterNot { it.id == taskId })
     }
 
-    suspend fun createRequest(title: String, body: String): Result<Unit> = runWorkspaceEdit { state ->
-        val cleanTitle = title.trim().take(200)
+    suspend fun createRequest(request: QuickRequest): Result<Unit> = runWorkspaceEdit { state ->
+        val cleanTitle = request.title.trim().take(200)
         require(cleanTitle.isNotEmpty()) { "Request title must not be empty" }
         val dto = LocalRequestDto(
             id = UUID.randomUUID().toString(),
             title = cleanTitle,
-            body = body.trim().take(4000),
+            body = request.body.trim().take(4000),
+            docType = request.docType.take(20),
+            customerName = request.customerName.trim().take(120),
+            amountText = request.amountText.trim().take(80),
+            stampId = request.stampId.take(20),
+            isSigned = request.isSigned,
+            signatureName = request.signatureName.trim().take(80),
+            statusDot = request.statusDot.take(20),
+            statusLabel = request.statusLabel.trim().take(80),
+            splitMode = request.splitMode.take(20),
+            isChecklistOrder = request.isChecklistOrder,
             createdAtMs = System.currentTimeMillis()
         )
         state.copy(initialized = true, requests = listOf(dto) + state.requests)
+    }
+
+    suspend fun updateRequest(
+        requestId: String,
+        transform: (QuickRequest) -> QuickRequest
+    ): Result<Unit> = runWorkspaceEdit { state ->
+        val updated = state.requests.map { existing ->
+            if (existing.id == requestId) {
+                val mapped = transform(
+                    QuickRequest(
+                        id = existing.id,
+                        userId = "local",
+                        title = existing.title,
+                        body = existing.body,
+                        docType = existing.docType,
+                        customerName = existing.customerName,
+                        amountText = existing.amountText,
+                        stampId = existing.stampId,
+                        isSigned = existing.isSigned,
+                        signatureName = existing.signatureName,
+                        statusDot = existing.statusDot,
+                        statusLabel = existing.statusLabel,
+                        splitMode = existing.splitMode,
+                        isChecklistOrder = existing.isChecklistOrder
+                    )
+                )
+                existing.copy(
+                    title = mapped.title.trim().take(200).ifEmpty { existing.title },
+                    body = mapped.body.trim().take(4000),
+                    docType = mapped.docType.take(20),
+                    customerName = mapped.customerName.trim().take(120),
+                    amountText = mapped.amountText.trim().take(80),
+                    stampId = mapped.stampId.take(20),
+                    isSigned = mapped.isSigned,
+                    signatureName = mapped.signatureName.trim().take(80),
+                    statusDot = mapped.statusDot.take(20),
+                    statusLabel = mapped.statusLabel.trim().take(80),
+                    splitMode = mapped.splitMode.take(20),
+                    isChecklistOrder = mapped.isChecklistOrder
+                )
+            } else existing
+        }
+        state.copy(requests = updated)
     }
 
     suspend fun deleteRequest(requestId: String): Result<Unit> = runWorkspaceEdit { state ->
@@ -366,7 +503,12 @@ class LocalStoreRepository(private val context: Context) {
             activeRingId = p.activeRingId.take(100),
             refreshRateHz = if (p.refreshRateHz in setOf(60, 90, 120)) p.refreshRateHz else 120,
             layoutStyle = if (p.layoutStyle in setOf("L1", "L2", "L3")) p.layoutStyle else "L1",
-            appIconId = p.appIconId.ifBlank { "I1" }.take(12)
+            appIconId = p.appIconId.ifBlank { "I1" }.take(12),
+            bannerImgDp = p.bannerImgDp.coerceIn(28, 170),
+            taskImgDp = p.taskImgDp.coerceIn(28, 150),
+            alertImgDp = p.alertImgDp.coerceIn(44, 220),
+            textScalePercent = p.textScalePercent.coerceIn(75, 185),
+            cardScalePercent = p.cardScalePercent.coerceIn(80, 160)
         )
         val restoredTasks = snapshot.tasks.mapIndexed { idx, t: BackupTaskDto ->
             LocalTaskDto(
@@ -382,6 +524,7 @@ class LocalStoreRepository(private val context: Context) {
                 alertTime = t.alertTime.take(10),
                 nextDueDate = t.nextDueDate.take(20),
                 lastAlertedDate = t.lastAlertedDate.take(20),
+                ringId = t.ringId.take(100),
                 sortOrder = if (t.sortOrder > 0L) t.sortOrder else (System.currentTimeMillis() - idx)
             )
         }
@@ -391,6 +534,16 @@ class LocalStoreRepository(private val context: Context) {
                 id = UUID.randomUUID().toString(),
                 title = r.title.trim().take(200).ifEmpty { "Request" },
                 body = r.body.take(4000),
+                docType = r.docType.ifBlank { "invoice" },
+                customerName = r.customerName.take(120),
+                amountText = r.amountText.take(80),
+                stampId = r.stampId.ifBlank { "none" },
+                isSigned = r.isSigned,
+                signatureName = r.signatureName.take(80),
+                statusDot = r.statusDot.ifBlank { "none" },
+                statusLabel = r.statusLabel.take(80),
+                splitMode = r.splitMode.ifBlank { "full" },
+                isChecklistOrder = r.isChecklistOrder,
                 createdAtMs = baseTime - idx
             )
         }

@@ -8,6 +8,8 @@ import com.google.firebase.firestore.DocumentId
 import com.google.firebase.firestore.IgnoreExtraProperties
 import com.google.firebase.firestore.ServerTimestamp
 import kotlinx.serialization.Serializable
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 
 enum class RepeatMode(val wire: String) {
     NONE("NONE"),
@@ -37,6 +39,7 @@ data class SmartTask(
     val alertTime: String = "",
     val nextDueDate: String = "",
     val lastAlertedDate: String = "",
+    val ringId: String = "",
     val sortOrder: Long = 0L,
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
@@ -58,6 +61,35 @@ data class SmartTask(
         val idx = ((cycleIndex % cycleSteps.size).toInt() + cycleSteps.size) % cycleSteps.size
         return cycleSteps[idx]
     }
+
+    fun isActiveOnDate(date: LocalDate = LocalDate.now()): Boolean {
+        val dateStr = date.format(DateTimeFormatter.ISO_LOCAL_DATE)
+        val jsDay = (date.dayOfWeek.value % 7).toLong()
+        val notDeferred = nextDueDate.isBlank() || nextDueDate <= dateStr
+        return if (usesWeekDays()) {
+            weekDays.contains(jsDay) && notDeferred
+        } else {
+            notDeferred
+        }
+    }
+
+    fun nextScheduledDayLabel(dayLabels: List<String>, today: LocalDate = LocalDate.now()): String {
+        if (dayLabels.size < 7) return nextDueDate
+        val tomorrow = today.plusDays(1)
+        if (usesWeekDays()) {
+            for (offset in 1L..7L) {
+                val candidate = today.plusDays(offset)
+                val jsDay = (candidate.dayOfWeek.value % 7).toLong()
+                if (weekDays.contains(jsDay)) {
+                    return dayLabels.getOrNull(jsDay.toInt()).orEmpty()
+                }
+            }
+        }
+        val parsed = runCatching { LocalDate.parse(nextDueDate) }.getOrNull()
+        val target = parsed ?: tomorrow
+        val jsDay = (target.dayOfWeek.value % 7).toLong()
+        return dayLabels.getOrNull(jsDay.toInt()).orEmpty()
+    }
 }
 
 @Keep
@@ -67,6 +99,16 @@ data class QuickRequest(
     val userId: String = "",
     val title: String = "",
     val body: String = "",
+    val docType: String = "invoice",
+    val customerName: String = "",
+    val amountText: String = "",
+    val stampId: String = "none",
+    val isSigned: Boolean = false,
+    val signatureName: String = "",
+    val statusDot: String = "none",
+    val statusLabel: String = "",
+    val splitMode: String = "full",
+    val isChecklistOrder: Boolean = false,
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
 )
@@ -87,8 +129,13 @@ data class UserPreferences(
     val bannerSub: String = "",
     val bannerImg: String = "default",
     val bannerImgSize: String = "medium",
+    val bannerImgDp: Int = 54,
     val bannerPhotoShape: String = "ring",
     val taskImgSize: String = "medium",
+    val taskImgDp: Int = 48,
+    val alertImgDp: Int = 120,
+    val textScalePercent: Int = 100,
+    val cardScalePercent: Int = 100,
     val cardShape: String = "ring",
     val showBanner: Boolean = true,
     val showTopBarTabs: Boolean = true,
@@ -115,6 +162,24 @@ data class UserPreferences(
     val layoutStyle: String = "L1",
     val appIconId: String = "I1",
     val lastBackupLabel: String = "",
+    val reqSignatureName: String = "",
+    val reqDefaultDocType: String = "invoice",
+    val reqDefaultSplitMode: String = "word_2",
+    val reqDefaultStatusLabel: String = "جاهز",
+    val reqCustomStatuses: String = "متاح، غير متاح، وصل، لم يصل، جاهز، غير مكتمل",
+    val reqAutoSignOnComplete: Boolean = true,
+    val reqShowDocTabs: Boolean = true,
+    val reqShowStamps: Boolean = true,
+    val reqShowSignature: Boolean = true,
+    val reqShowSplitControls: Boolean = true,
+    val reqShowOrdersSection: Boolean = true,
+    val reqShowRedGreenDots: Boolean = true,
+    val reqShowStatusBadge: Boolean = true,
+    val reqShowCustomer: Boolean = true,
+    val reqShowAmount: Boolean = true,
+    val reqShowDate: Boolean = true,
+    val reqShowHeaderBadge: Boolean = true,
+    val reqDefaultStampId: String = "paid_thanks",
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
 )
@@ -162,13 +227,24 @@ data class BackupTaskDto(
     val alertTime: String = "",
     val nextDueDate: String = "",
     val lastAlertedDate: String = "",
+    val ringId: String = "",
     val sortOrder: Long = 0L
 )
 
 @Serializable
 data class BackupRequestDto(
     val title: String,
-    val body: String = ""
+    val body: String = "",
+    val docType: String = "invoice",
+    val customerName: String = "",
+    val amountText: String = "",
+    val stampId: String = "none",
+    val isSigned: Boolean = false,
+    val signatureName: String = "",
+    val statusDot: String = "none",
+    val statusLabel: String = "",
+    val splitMode: String = "full",
+    val isChecklistOrder: Boolean = false
 )
 
 @Serializable
@@ -184,8 +260,13 @@ data class BackupPreferencesDto(
     val bannerTitle: String = "M Notes",
     val bannerSub: String = "",
     val bannerImgSize: String = "medium",
+    val bannerImgDp: Int = 54,
     val bannerPhotoShape: String = "ring",
     val taskImgSize: String = "medium",
+    val taskImgDp: Int = 48,
+    val alertImgDp: Int = 120,
+    val textScalePercent: Int = 100,
+    val cardScalePercent: Int = 100,
     val cardShape: String = "ring",
     val showBanner: Boolean = true,
     val showTopBarTabs: Boolean = true,
@@ -210,7 +291,25 @@ data class BackupPreferencesDto(
     val autoBackup: Boolean = true,
     val refreshRateHz: Int = 120,
     val layoutStyle: String = "L1",
-    val appIconId: String = "I1"
+    val appIconId: String = "I1",
+    val reqSignatureName: String = "",
+    val reqDefaultDocType: String = "invoice",
+    val reqDefaultSplitMode: String = "word_2",
+    val reqDefaultStatusLabel: String = "جاهز",
+    val reqCustomStatuses: String = "متاح، غير متاح، وصل، لم يصل، جاهز، غير مكتمل",
+    val reqAutoSignOnComplete: Boolean = true,
+    val reqShowDocTabs: Boolean = true,
+    val reqShowStamps: Boolean = true,
+    val reqShowSignature: Boolean = true,
+    val reqShowSplitControls: Boolean = true,
+    val reqShowOrdersSection: Boolean = true,
+    val reqShowRedGreenDots: Boolean = true,
+    val reqShowStatusBadge: Boolean = true,
+    val reqShowCustomer: Boolean = true,
+    val reqShowAmount: Boolean = true,
+    val reqShowDate: Boolean = true,
+    val reqShowHeaderBadge: Boolean = true,
+    val reqDefaultStampId: String = "paid_thanks"
 )
 
 @Serializable
@@ -249,10 +348,17 @@ data class StyleOption(
     val nameEn: String
 )
 
+data class PhotoCategorySpec(
+    val id: String,
+    val nameAr: String,
+    val nameEn: String
+)
+
 data class BuiltInPhotoSpec(
     val uri: String,
     val nameAr: String,
-    val nameEn: String
+    val nameEn: String,
+    val category: String = "heritage"
 )
 
 data class LauncherIconSpec(
@@ -385,29 +491,71 @@ object MNotesCatalog {
         GymTrack("G10", "أدرينالين الجولة الأخيرة (١٠ ث)", "Final Set Adrenaline (10s)")
     )
 
+    val photoCategories = listOf(
+        PhotoCategorySpec("all", "كل الصور", "All Photos"),
+        PhotoCategorySpec("gym", "أدوات وصور الجيم", "Gym & Gear"),
+        PhotoCategorySpec("fruits", "فواكه القرون الوسطى", "Medieval Fruits"),
+        PhotoCategorySpec("vegetables", "خضروات القرون الوسطى", "Medieval Veggies"),
+        PhotoCategorySpec("heritage", "شخصيات وعصور زمان", "Characters & Era")
+    )
+
     val pixel3dPhotos = listOf(
-        BuiltInPhotoSpec("res://img_3d_elder_beige", "رجل كبير - بيج", "Elder - Beige"),
-        BuiltInPhotoSpec("res://img_3d_elder_man", "رجل كبير - فاتح", "Elder - Light"),
-        BuiltInPhotoSpec("res://img_3d_bald_brown", "شاب أقرع - بني", "Bald - Brown"),
-        BuiltInPhotoSpec("res://img_3d_bald_man", "شاب أقرع - فاتح", "Bald - Light"),
-        BuiltInPhotoSpec("res://img_3d_haired_mint", "شاب بشعر - نعناعي", "Man - Mint"),
-        BuiltInPhotoSpec("res://img_3d_haired_man", "شاب بشعر - فاتح", "Man - Light"),
-        BuiltInPhotoSpec("res://img_3d_child_cream", "طفلة - كريمي", "Child - Cream"),
-        BuiltInPhotoSpec("res://img_3d_child", "طفل - فاتح", "Child - Light"),
-        BuiltInPhotoSpec("res://img_3d_woman_beige", "امرأة - بيج", "Woman - Beige"),
-        BuiltInPhotoSpec("res://img_3d_woman", "امرأة - فاتح", "Woman - Light"),
-        BuiltInPhotoSpec("res://img_3d_medieval_bald", "القرون الوسطى - أصلع", "Medieval Bald"),
-        BuiltInPhotoSpec("res://img_3d_jahiliyyah", "أيام الجاهلية - صحراء", "Ancient Arabian"),
-        BuiltInPhotoSpec("res://img_3d_ancient_fruits", "فواكه زمان في أواني", "Heritage Fruits"),
-        BuiltInPhotoSpec("res://img_3d_ancient_bread_grain", "خبز زمان وقمح وشعير", "Bread & Grains"),
-        BuiltInPhotoSpec("res://img_3d_gym_chest", "جيم - صدر (بيج)", "Gym - Chest"),
-        BuiltInPhotoSpec("res://img_3d_gym_back", "جيم - ظهر (بني)", "Gym - Back"),
-        BuiltInPhotoSpec("res://img_3d_gym_legs", "جيم - رجل (سماوي)", "Gym - Legs"),
-        BuiltInPhotoSpec("res://img_3d_gym_legpress", "جيم - جهاز الرجل", "Gym - Leg Press"),
-        BuiltInPhotoSpec("res://img_3d_gym_lunges", "جيم - رجل بالدمبل", "Gym - Lunges"),
-        BuiltInPhotoSpec("res://img_3d_gym_arms", "جيم - ذراع وبار", "Gym - Arms"),
-        BuiltInPhotoSpec("res://img_3d_gym_shoulders", "جيم - أكتاف (بيج)", "Gym - Shoulders"),
-        BuiltInPhotoSpec("res://img_3d_gym_workout", "جيم - دمبل (فاتح)", "Gym - Dumbbells")
+        // Gym Equipment & Workouts
+        BuiltInPhotoSpec("res://img_3d_gym_workout", "دمبل تمرين", "Dumbbells", "gym"),
+        BuiltInPhotoSpec("res://img_3d_gym_chest", "تمرين الصدر", "Chest Press", "gym"),
+        BuiltInPhotoSpec("res://img_3d_gym_back", "تمرين الظهر", "Back Workout", "gym"),
+        BuiltInPhotoSpec("res://img_3d_gym_legs", "تمرين الرجل", "Leg Day", "gym"),
+        BuiltInPhotoSpec("res://img_3d_gym_legpress", "جهاز دفع الرجل", "Leg Press Machine", "gym"),
+        BuiltInPhotoSpec("res://img_3d_gym_lunges", "طعن بالدمبل", "Dumbbell Lunges", "gym"),
+        BuiltInPhotoSpec("res://img_3d_gym_arms", "تمرين الذراع والبار", "Arm Curl Bar", "gym"),
+        BuiltInPhotoSpec("res://img_3d_gym_shoulders", "تمرين الأكتاف", "Shoulder Press", "gym"),
+        BuiltInPhotoSpec("res://img_gym_gear#0", "دمبل سداسي أسود", "Hex Dumbbells", "gym"),
+        BuiltInPhotoSpec("res://img_gym_gear#1", "كيتل بل نعناعي", "Kettlebell", "gym"),
+        BuiltInPhotoSpec("res://img_gym_gear#2", "بار أولمبي وأوزان", "Olympic Barbell", "gym"),
+        BuiltInPhotoSpec("res://img_gym_gear#3", "بنش تمرين مائل", "Workout Bench", "gym"),
+        BuiltInPhotoSpec("res://img_gym_gear#4", "جهاز العقلة والمتوازي", "Pull-Up Station", "gym"),
+        BuiltInPhotoSpec("res://img_gym_gear#5", "حبل قفز وأحزمة", "Jump Rope & Straps", "gym"),
+        BuiltInPhotoSpec("res://img_gym_gear#6", "قفازات ملاكمة", "Boxing Gloves", "gym"),
+        BuiltInPhotoSpec("res://img_gym_gear#7", "طارات أوزان ملونة", "Weight Plates", "gym"),
+        BuiltInPhotoSpec("res://img_gym_gear#8", "شيكر ومنشفة جيم", "Shaker & Towel", "gym"),
+
+        // Medieval Fruits
+        BuiltInPhotoSpec("res://img_3d_ancient_fruits", "سلة فواكه زمان", "Ancient Fruit Bowl", "fruits"),
+        BuiltInPhotoSpec("res://img_medieval_fruits#0", "رمان في إناء فخار", "Clay Bowl Pomegranate", "fruits"),
+        BuiltInPhotoSpec("res://img_medieval_fruits#1", "تين طازج في فخار", "Fresh Figs", "fruits"),
+        BuiltInPhotoSpec("res://img_medieval_fruits#2", "تمر ذهبي في صحن نحاس", "Golden Dates", "fruits"),
+        BuiltInPhotoSpec("res://img_medieval_fruits#3", "عنب عنبري على خشب", "Amber Grapes", "fruits"),
+        BuiltInPhotoSpec("res://img_medieval_fruits#4", "تفاح أحمر في سلة خوص", "Basket Apples", "fruits"),
+        BuiltInPhotoSpec("res://img_medieval_fruits#5", "خوخ في إناء حجري", "Stoneware Peaches", "fruits"),
+        BuiltInPhotoSpec("res://img_medieval_fruits#6", "كمثرى ذهبية في فخار", "Earthenware Pears", "fruits"),
+        BuiltInPhotoSpec("res://img_medieval_fruits#7", "شمام على طبق خشب", "Carved Wood Melon", "fruits"),
+        BuiltInPhotoSpec("res://img_medieval_fruits#8", "برقوق داكن في خزف", "Ceramic Plums", "fruits"),
+
+        // Medieval Vegetables
+        BuiltInPhotoSpec("res://img_medieval_veggies#0", "قرع عسلي على خشب", "Heirloom Pumpkin", "vegetables"),
+        BuiltInPhotoSpec("res://img_medieval_veggies#1", "لفت أرجواني في فخار", "Purple Turnips", "vegetables"),
+        BuiltInPhotoSpec("res://img_medieval_veggies#2", "جزر طازج على لوح خشب", "Fresh Carrots", "vegetables"),
+        BuiltInPhotoSpec("res://img_medieval_veggies#3", "بصل ذهبي في سلة", "Woven Basket Onions", "vegetables"),
+        BuiltInPhotoSpec("res://img_medieval_veggies#4", "ثوم مضفور في طبق حجر", "Braided Garlic", "vegetables"),
+        BuiltInPhotoSpec("res://img_medieval_veggies#5", "ملفوف أخضر طازج", "Heirloom Cabbage", "vegetables"),
+        BuiltInPhotoSpec("res://img_medieval_veggies#6", "كراث وأعشاب ريفية", "Leeks & Herbs", "vegetables"),
+        BuiltInPhotoSpec("res://img_medieval_veggies#7", "فجل أحمر في فخار", "Terracotta Radishes", "vegetables"),
+        BuiltInPhotoSpec("res://img_medieval_veggies#8", "زيتون في إناء قديم", "Ancient Olives", "vegetables"),
+
+        // Heritage & 3D Characters
+        BuiltInPhotoSpec("res://img_3d_elder_beige", "رجل كبير - بيج", "Elder - Beige", "heritage"),
+        BuiltInPhotoSpec("res://img_3d_elder_man", "رجل كبير - فاتح", "Elder - Light", "heritage"),
+        BuiltInPhotoSpec("res://img_3d_bald_brown", "شاب أقرع - بني", "Bald - Brown", "heritage"),
+        BuiltInPhotoSpec("res://img_3d_bald_man", "شاب أقرع - فاتح", "Bald - Light", "heritage"),
+        BuiltInPhotoSpec("res://img_3d_haired_mint", "شاب بشعر - نعناعي", "Man - Mint", "heritage"),
+        BuiltInPhotoSpec("res://img_3d_haired_man", "شاب بشعر - فاتح", "Man - Light", "heritage"),
+        BuiltInPhotoSpec("res://img_3d_child_cream", "طفلة - كريمي", "Child - Cream", "heritage"),
+        BuiltInPhotoSpec("res://img_3d_child", "طفل - فاتح", "Child - Light", "heritage"),
+        BuiltInPhotoSpec("res://img_3d_woman_beige", "امرأة - بيج", "Woman - Beige", "heritage"),
+        BuiltInPhotoSpec("res://img_3d_woman", "امرأة - فاتح", "Woman - Light", "heritage"),
+        BuiltInPhotoSpec("res://img_3d_medieval_bald", "القرون الوسطى - أصلع", "Medieval Bald", "heritage"),
+        BuiltInPhotoSpec("res://img_3d_jahiliyyah", "أيام الجاهلية - صحراء", "Ancient Arabian", "heritage"),
+        BuiltInPhotoSpec("res://img_3d_ancient_bread_grain", "خبز زمان وقمح وشعير", "Bread & Grains", "heritage")
     )
 
     val layoutOptions = listOf(

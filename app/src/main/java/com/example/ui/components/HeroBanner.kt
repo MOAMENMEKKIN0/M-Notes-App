@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -43,7 +44,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.localization.AppStrings
 import com.example.model.UserPreferences
+import com.example.ui.theme.LocalMNotesCardScale
 import com.example.ui.theme.LocalMNotesColors
+import com.example.ui.theme.LocalMNotesTextScale
 
 fun bannerIconVector(iconId: String): ImageVector? = when (iconId) {
     "clock" -> Icons.Rounded.AccessTime
@@ -66,12 +69,13 @@ private fun BannerTitleRow(
     iconTint: Color,
     fontSizeSp: Float = 15f
 ) {
+    val textScale = LocalMNotesTextScale.current
     val icon = bannerIconVector(iconId)
     Row(verticalAlignment = Alignment.CenterVertically) {
         if (icon != null) {
             Box(
                 modifier = Modifier
-                    .size(24.dp)
+                    .size((24f * textScale.coerceIn(0.85f, 1.45f)).dp)
                     .clip(CircleShape)
                     .background(iconChipBg),
                 contentAlignment = Alignment.Center
@@ -80,7 +84,7 @@ private fun BannerTitleRow(
                     imageVector = icon,
                     contentDescription = null,
                     tint = iconTint,
-                    modifier = Modifier.size(14.dp)
+                    modifier = Modifier.size((14f * textScale.coerceIn(0.85f, 1.45f)).dp)
                 )
             }
             Spacer(Modifier.width(6.dp))
@@ -88,9 +92,10 @@ private fun BannerTitleRow(
         Text(
             text = title,
             color = titleColor,
-            fontSize = fontSizeSp.sp,
+            fontSize = (fontSizeSp * textScale).sp,
+            lineHeight = ((fontSizeSp + 5f) * textScale).sp,
             fontWeight = FontWeight.ExtraBold,
-            maxLines = 1,
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis
         )
     }
@@ -101,9 +106,12 @@ fun HeroBanner(
     prefs: UserPreferences,
     dueTodayCount: Int,
     isDemo: Boolean = false,
-    onBannerPhotoClick: () -> Unit = {}
+    onBannerPhotoClick: () -> Unit = {},
+    onBannerBodyClick: () -> Unit = {}
 ) {
     val colors = LocalMNotesColors.current
+    val textScale = LocalMNotesTextScale.current
+    val cardScale = LocalMNotesCardScale.current
     val lang = prefs.lang
     if (!prefs.showBanner) {
         if (isDemo) {
@@ -115,7 +123,7 @@ fun HeroBanner(
                 Text(
                     text = "${AppStrings.get(lang, "banShow")} (OFF)",
                     color = colors.textMuted,
-                    fontSize = 12.sp,
+                    fontSize = (12f * textScale).sp,
                     modifier = Modifier.padding(10.dp)
                 )
             }
@@ -125,7 +133,7 @@ fun HeroBanner(
 
     val title = prefs.bannerTitle.ifBlank { "M Notes" }
     val sub = prefs.bannerSub.ifBlank { AppStrings.get(lang, "banSubDef") }
-    val photoDp = bannerImageDp(prefs.bannerImgSize)
+    val photoDp = bannerImageDp(prefs.bannerImgSize, prefs.bannerImgDp)
     val photoClick: (() -> Unit)? = if (isDemo) null else onBannerPhotoClick
 
     when (prefs.bannerStyle) {
@@ -133,7 +141,7 @@ fun HeroBanner(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(104.dp)
+                    .height((photoDp + 48.dp).coerceAtLeast(104.dp))
                     .shadow(3.dp, RoundedCornerShape(20.dp), clip = false)
                     .clip(RoundedCornerShape(20.dp))
                     .then(if (photoClick != null) Modifier.clickable(onClick = photoClick) else Modifier)
@@ -168,8 +176,8 @@ fun HeroBanner(
                     Text(
                         text = sub,
                         color = Color.White.copy(alpha = 0.9f),
-                        fontSize = 11.5.sp,
-                        maxLines = 1,
+                        fontSize = (11.5f * textScale).sp,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
@@ -180,11 +188,12 @@ fun HeroBanner(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(88.dp)
+                    .height((photoDp + 34.dp).coerceAtLeast(88.dp))
                     .shadow(2.dp, RoundedCornerShape(20.dp), clip = false)
                     .clip(RoundedCornerShape(20.dp))
                     .background(colors.cardBg)
                     .border(1.dp, colors.borderSoft, RoundedCornerShape(20.dp))
+                    .then(if (!isDemo) Modifier.clickable(onClick = onBannerBodyClick) else Modifier)
             ) {
                 Column(
                     modifier = Modifier
@@ -205,7 +214,7 @@ fun HeroBanner(
                     Text(
                         text = sub,
                         color = colors.textMuted,
-                        fontSize = 11.sp,
+                        fontSize = (11f * textScale).sp,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -233,7 +242,8 @@ fun HeroBanner(
                     .shadow(3.dp, RoundedCornerShape(999.dp), clip = false)
                     .clip(RoundedCornerShape(999.dp))
                     .background(colors.primary)
-                    .padding(start = 12.dp, end = 14.dp, top = 8.dp, bottom = 8.dp),
+                    .then(if (!isDemo) Modifier.clickable(onClick = onBannerBodyClick) else Modifier)
+                    .padding(start = 12.dp, end = 14.dp, top = (8f * cardScale).dp, bottom = (8f * cardScale).dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -254,16 +264,16 @@ fun HeroBanner(
                         Text(
                             text = title,
                             color = Color.White,
-                            fontSize = 13.5.sp,
+                            fontSize = (13.5f * textScale).sp,
                             fontWeight = FontWeight.ExtraBold,
-                            maxLines = 1,
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
                             text = sub,
                             color = Color.White.copy(alpha = 0.9f),
-                            fontSize = 10.5.sp,
-                            maxLines = 1,
+                            fontSize = (10.5f * textScale).sp,
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis
                         )
                     }
@@ -278,7 +288,7 @@ fun HeroBanner(
                     Text(
                         text = "$dueTodayCount ${AppStrings.get(lang, "forToday")}",
                         color = Color.White,
-                        fontSize = 10.5.sp,
+                        fontSize = (10.5f * textScale).sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -293,6 +303,7 @@ fun HeroBanner(
                     .clip(RoundedCornerShape(20.dp))
                     .background(Brush.linearGradient(listOf(colors.primarySoft, colors.bgTopGlow)))
                     .border(1.dp, colors.borderSoft, RoundedCornerShape(20.dp))
+                    .then(if (!isDemo) Modifier.clickable(onClick = onBannerBodyClick) else Modifier)
                     .padding(8.dp)
             ) {
                 Row(
@@ -300,7 +311,7 @@ fun HeroBanner(
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(14.dp))
                         .background(Color.White.copy(alpha = 0.85f))
-                        .padding(horizontal = 11.dp, vertical = 9.dp),
+                        .padding(horizontal = 11.dp, vertical = (9f * cardScale).dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     MediaAvatarSlot(
@@ -324,8 +335,8 @@ fun HeroBanner(
                         Text(
                             text = sub,
                             color = colors.textMuted,
-                            fontSize = 11.sp,
-                            maxLines = 1,
+                            fontSize = (11f * textScale).sp,
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis
                         )
                     }
@@ -341,8 +352,9 @@ fun HeroBanner(
                 modifier = Modifier
                     .fillMaxWidth()
                     .border(1.dp, colors.borderSoft, RoundedCornerShape(20.dp))
+                    .then(if (!isDemo) Modifier.clickable(onClick = onBannerBodyClick) else Modifier)
             ) {
-                Column(modifier = Modifier.padding(12.dp)) {
+                Column(modifier = Modifier.padding((12f * cardScale).dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         MediaAvatarSlot(
                             imgUri = prefs.bannerImg,
@@ -365,8 +377,8 @@ fun HeroBanner(
                             Text(
                                 text = sub,
                                 color = colors.textMuted,
-                                fontSize = 11.sp,
-                                maxLines = 1,
+                                fontSize = (11f * textScale).sp,
+                                maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
                             )
                         }
@@ -414,9 +426,10 @@ fun HeroBanner(
                         .fillMaxWidth()
                         .padding(bottom = 5.dp)
                         .border(1.dp, colors.borderSoft, RoundedCornerShape(16.dp))
+                        .then(if (!isDemo) Modifier.clickable(onClick = onBannerBodyClick) else Modifier)
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = (10f * cardScale).dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         MediaAvatarSlot(
@@ -440,8 +453,8 @@ fun HeroBanner(
                             Text(
                                 text = sub,
                                 color = colors.textMuted,
-                                fontSize = 11.sp,
-                                maxLines = 1,
+                                fontSize = (11f * textScale).sp,
+                                maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
                             )
                         }
@@ -455,11 +468,13 @@ fun HeroBanner(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .heightIn(min = 68.dp)
                     .shadow(2.dp, RoundedCornerShape(20.dp), clip = false)
                     .clip(RoundedCornerShape(20.dp))
                     .background(Brush.linearGradient(listOf(colors.bgTopGlow, colors.cardBg)))
                     .border(1.dp, colors.borderSoft, RoundedCornerShape(20.dp))
-                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                    .then(if (!isDemo) Modifier.clickable(onClick = onBannerBodyClick) else Modifier)
+                    .padding(horizontal = 14.dp, vertical = (12f * cardScale).dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -475,8 +490,8 @@ fun HeroBanner(
                     Text(
                         text = sub,
                         color = colors.textMuted,
-                        fontSize = 11.5.sp,
-                        maxLines = 1,
+                        fontSize = (11.5f * textScale).sp,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
                 }

@@ -59,12 +59,14 @@ import androidx.compose.ui.unit.sp
 import com.example.localization.AppStrings
 import com.example.model.SmartTask
 import com.example.ui.theme.LocalMNotesColors
+import com.example.ui.theme.LocalMNotesTextScale
 import kotlinx.coroutines.delay
 
 @Composable
 fun AlertOverlay(
     task: SmartTask,
     alertStyle: String,
+    alertImgDp: Int = 120,
     lang: String,
     onComplete: () -> Unit,
     onDismiss: () -> Unit
@@ -72,6 +74,7 @@ fun AlertOverlay(
     BackHandler(onBack = onDismiss)
 
     val colors = LocalMNotesColors.current
+    val textScale = LocalMNotesTextScale.current
     var isCompleting by remember(task.id) { mutableStateOf(false) }
 
     LaunchedEffect(isCompleting) {
@@ -149,12 +152,13 @@ fun AlertOverlay(
                         }
 
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            AlertAvatar(task = task, sizeDp = 136, ring = true)
+                            AlertAvatar(task = task, sizeDp = alertImgDp.coerceIn(56, 220), ring = true)
                             Spacer(Modifier.height(20.dp))
                             Text(
                                 text = title,
                                 color = contentTextColor,
-                                fontSize = 24.sp,
+                                fontSize = (24f * textScale).sp,
+                                lineHeight = (30f * textScale).sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 textAlign = TextAlign.Center
                             )
@@ -163,7 +167,7 @@ fun AlertOverlay(
                                 Text(
                                     text = sub,
                                     color = subTextColor,
-                                    fontSize = 14.sp,
+                                    fontSize = (14f * textScale).sp,
                                     textAlign = TextAlign.Center
                                 )
                             }
@@ -230,12 +234,13 @@ fun AlertOverlay(
                             modifier = Modifier.padding(22.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            AlertAvatar(task = task, sizeDp = 76, ring = false)
+                            AlertAvatar(task = task, sizeDp = (alertImgDp * 0.68f).toInt().coerceIn(48, 160), ring = false)
                             Spacer(Modifier.height(12.dp))
                             Text(
                                 text = title,
                                 color = contentTextColor,
-                                fontSize = 17.sp,
+                                fontSize = (17f * textScale).sp,
+                                lineHeight = (22f * textScale).sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 textAlign = TextAlign.Center
                             )
@@ -244,7 +249,7 @@ fun AlertOverlay(
                                 Text(
                                     text = sub,
                                     color = subTextColor,
-                                    fontSize = 12.5.sp,
+                                    fontSize = (12.5f * textScale).sp,
                                     textAlign = TextAlign.Center
                                 )
                             }
@@ -309,20 +314,21 @@ fun AlertOverlay(
                             )
                             Spacer(Modifier.height(14.dp))
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                AlertAvatar(task = task, sizeDp = 54, ring = false)
+                                AlertAvatar(task = task, sizeDp = (alertImgDp * 0.52f).toInt().coerceIn(40, 120), ring = false)
                                 Spacer(Modifier.width(12.dp))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
                                         text = title,
                                         color = contentTextColor,
-                                        fontSize = 16.sp,
+                                        fontSize = (16f * textScale).sp,
+                                        lineHeight = (21f * textScale).sp,
                                         fontWeight = FontWeight.ExtraBold
                                     )
                                     if (sub.isNotBlank()) {
                                         Text(
                                             text = sub,
                                             color = subTextColor,
-                                            fontSize = 12.sp
+                                            fontSize = (12f * textScale).sp
                                         )
                                     }
                                 }
@@ -458,20 +464,20 @@ fun AlertOverlay(
                     ) {
                         Column(modifier = Modifier.padding(14.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                AlertAvatar(task = task, sizeDp = 42, ring = false)
+                                AlertAvatar(task = task, sizeDp = (alertImgDp * 0.44f).toInt().coerceIn(36, 96), ring = false)
                                 Spacer(Modifier.width(10.dp))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
                                         text = title,
                                         color = contentTextColor,
-                                        fontSize = 14.sp,
+                                        fontSize = (14f * textScale).sp,
                                         fontWeight = FontWeight.ExtraBold
                                     )
                                     if (sub.isNotBlank()) {
                                         Text(
                                             text = sub,
                                             color = subTextColor,
-                                            fontSize = 11.5.sp
+                                            fontSize = (11.5f * textScale).sp
                                         )
                                     }
                                 }

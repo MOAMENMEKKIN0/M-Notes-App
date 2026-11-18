@@ -25,11 +25,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AddPhotoAlternate
 import androidx.compose.material.icons.rounded.CalendarMonth
+import androidx.compose.material.icons.rounded.MusicNote
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -57,6 +60,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.localization.AppStrings
@@ -64,6 +68,7 @@ import com.example.model.LibraryPhoto
 import com.example.model.MNotesCatalog
 import com.example.model.RepeatMode
 import com.example.model.SmartTask
+import com.example.model.TrimmedRingtone
 import com.example.ui.theme.LocalMNotesColors
 import java.time.LocalDate
 import java.util.Calendar
@@ -75,6 +80,8 @@ fun TaskEditorSheet(
     draftImgUri: String,
     lang: String,
     libraryPhotos: List<LibraryPhoto>,
+    trimmedRingtones: List<TrimmedRingtone>,
+    onPreviewRingtone: (String) -> Unit,
     onPickAndCropPhoto: (Uri) -> Unit,
     onSelectDraftImg: (String) -> Unit,
     onSave: (
@@ -87,6 +94,7 @@ fun TaskEditorSheet(
         weekDays: List<Long>,
         alertEnabled: Boolean,
         imgUri: String,
+        ringId: String,
         testAlertAfterSave: Boolean
     ) -> Unit,
     onDismiss: () -> Unit
@@ -113,6 +121,7 @@ fun TaskEditorSheet(
     }
     var selectedDays by remember(editingTask?.id) { mutableStateOf(editingTask?.weekDays ?: emptyList()) }
     var alertEnabled by remember(editingTask?.id) { mutableStateOf(editingTask?.alertEnabled ?: true) }
+    var selectedRingId by remember(editingTask?.id) { mutableStateOf(editingTask?.ringId ?: "") }
 
     val photoLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
@@ -146,7 +155,7 @@ fun TaskEditorSheet(
                 )
                 Button(
                     onClick = onDismiss,
-                    shape = RoundedCornerShape(999.dp),
+                    shape = CircleShape,
                     colors = ButtonDefaults.buttonColors(containerColor = colors.primary)
                 ) {
                     Text(AppStrings.get(lang, "close"), fontSize = 12.sp, fontWeight = FontWeight.Bold)
@@ -367,57 +376,111 @@ fun TaskEditorSheet(
                         }
                     }
 
-                    if (repeatMode == RepeatMode.WEEKLY || repeatMode == RepeatMode.CYCLE) {
-                        Spacer(Modifier.height(10.dp))
-                        Surface(
-                            shape = RoundedCornerShape(14.dp),
-                            color = colors.primarySoft,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .border(1.dp, colors.primary.copy(alpha = 0.3f), RoundedCornerShape(14.dp))
-                        ) {
-                            Column(modifier = Modifier.padding(10.dp)) {
+                    // Always show circular weekday selection buttons inside Task Editor
+                    Spacer(Modifier.height(10.dp))
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = colors.primarySoft.copy(alpha = 0.7f),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, colors.primary.copy(alpha = 0.25f), RoundedCornerShape(16.dp))
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                                 Text(
-                                    text = AppStrings.get(lang, "daysLbl"),
+                                    text = if (lang == "en") "Scheduled Weekdays (repeats forever)" else "أيام التمرين أو المهمة (تتكرر للأبد)",
                                     color = colors.primary,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.ExtraBold
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    modifier = Modifier.weight(1f)
                                 )
-                                Spacer(Modifier.height(6.dp))
-                                FlowRow(
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    AppStrings.dayNames(lang).forEachIndexed { idx, dayName ->
-                                        val dLong = idx.toLong()
-                                        val active = selectedDays.contains(dLong)
-                                        Box(
-                                            modifier = Modifier
-                                                .clip(RoundedCornerShape(999.dp))
-                                                .background(if (active) colors.primary else colors.cardBg)
-                                                .border(
-                                                    1.dp,
-                                                    if (active) colors.primary else colors.borderSoft,
-                                                    RoundedCornerShape(999.dp)
-                                                )
-                                                .clickable {
-                                                    selectedDays = if (active) {
-                                                        selectedDays - dLong
-                                                    } else {
-                                                        selectedDays + dLong
-                                                    }
+                                val allSevenSelected = selectedDays.size == 7
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(999.dp))
+                                        .background(if (allSevenSelected) colors.primary else colors.cardBg)
+                                        .border(
+                                            1.dp,
+                                            if (allSevenSelected) colors.primary else colors.borderSoft,
+                                            RoundedCornerShape(999.dp)
+                                        )
+                                        .clickable {
+                                            if (allSevenSelected) {
+                                                selectedDays = emptyList()
+                                            } else {
+                                                selectedDays = (0L..6L).toList()
+                                                if (repeatMode == RepeatMode.NONE) {
+                                                    repeatMode = RepeatMode.WEEKLY
                                                 }
-                                                .padding(horizontal = 10.dp, vertical = 6.dp)
-                                        ) {
-                                            Text(
-                                                text = dayName,
-                                                color = if (active) Color.White else colors.textMuted,
-                                                fontSize = 11.5.sp,
-                                                fontWeight = FontWeight.Bold
-                                            )
+                                            }
                                         }
+                                        .padding(horizontal = 9.dp, vertical = 4.dp)
+                                ) {
+                                    Text(
+                                        text = if (lang == "en") "Every day" else "كل الأيام",
+                                        color = if (allSevenSelected) Color.White else colors.primary,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.ExtraBold
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                AppStrings.dayNames(lang).forEachIndexed { idx, dayName ->
+                                    val dLong = idx.toLong()
+                                    val active = selectedDays.contains(dLong)
+                                    Box(
+                                        modifier = Modifier
+                                            .size(44.dp)
+                                            .clip(CircleShape)
+                                            .background(if (active) colors.primary else colors.cardBg)
+                                            .border(
+                                                1.5.dp,
+                                                if (active) colors.primary else colors.borderSoft,
+                                                CircleShape
+                                            )
+                                            .clickable {
+                                                selectedDays = if (active) {
+                                                    selectedDays - dLong
+                                                } else {
+                                                    if (repeatMode == RepeatMode.NONE) {
+                                                        repeatMode = RepeatMode.WEEKLY
+                                                    }
+                                                    selectedDays + dLong
+                                                }
+                                            },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = dayName,
+                                            color = if (active) Color.White else colors.textDark,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            textAlign = TextAlign.Center,
+                                            maxLines = 1
+                                        )
                                     }
                                 }
+                            }
+                            if (selectedDays.isNotEmpty() && selectedDays.size < 7) {
+                                Spacer(Modifier.height(6.dp))
+                                Text(
+                                    text = if (lang == "en") {
+                                        "On off-days this task stays visible with a sleepy Zzz badge."
+                                    } else {
+                                        "في أيام الراحة تبقى المهمة ظاهرة بعلامة النوم Zzz وتنشط في الأيام المحددة تلقائياً."
+                                    },
+                                    color = colors.textMuted,
+                                    fontSize = 10.sp
+                                )
                             }
                         }
                     }
@@ -458,6 +521,163 @@ fun TaskEditorSheet(
                         }
                     }
 
+                    // Per-task Ringtone & Gym Track selector inside Task Details
+                    Spacer(Modifier.height(10.dp))
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = colors.bgMain,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, colors.borderSoft, RoundedCornerShape(16.dp))
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(28.dp)
+                                            .clip(CircleShape)
+                                            .background(colors.primarySoft),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.MusicNote,
+                                            contentDescription = null,
+                                            tint = colors.primary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                    Text(
+                                        text = if (lang == "en") "Task Ringtone / Gym Track" else "نغمة التنبيه والجيم لهذه المهمة",
+                                        color = colors.textDark,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.ExtraBold
+                                    )
+                                }
+
+                                Box(
+                                    modifier = Modifier
+                                        .clip(CircleShape)
+                                        .background(colors.primarySoft)
+                                        .border(1.dp, colors.primary.copy(alpha = 0.4f), CircleShape)
+                                        .clickable { onPreviewRingtone(selectedRingId) }
+                                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.PlayArrow,
+                                            contentDescription = AppStrings.get(lang, "play"),
+                                            tint = colors.primary,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Spacer(Modifier.width(2.dp))
+                                        Text(
+                                            text = AppStrings.get(lang, "tryNow").replace("▶", "").trim(),
+                                            color = colors.primary,
+                                            fontSize = 10.5.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                val defaultActive = selectedRingId.isBlank()
+                                Box(
+                                    modifier = Modifier
+                                        .clip(CircleShape)
+                                        .background(if (defaultActive) colors.primary else colors.cardBg)
+                                        .border(
+                                            1.dp,
+                                            if (defaultActive) colors.primary else colors.borderSoft,
+                                            CircleShape
+                                        )
+                                        .clickable { selectedRingId = "" }
+                                        .padding(horizontal = 12.dp, vertical = 7.dp)
+                                ) {
+                                    Text(
+                                        text = if (lang == "en") "Default" else "النغمة العامة",
+                                        color = if (defaultActive) Color.White else colors.textDark,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+
+                                MNotesCatalog.gymTracks.forEach { track ->
+                                    val active = selectedRingId == track.id
+                                    val lbl = (if (lang == "en") track.nameEn else track.nameAr)
+                                        .replace(" (١٠ ث)", "")
+                                        .replace(" (10s)", "")
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(CircleShape)
+                                            .background(if (active) colors.primary else colors.cardBg)
+                                            .border(
+                                                1.dp,
+                                                if (active) colors.primary else colors.borderSoft,
+                                                CircleShape
+                                            )
+                                            .clickable {
+                                                selectedRingId = track.id
+                                                onPreviewRingtone(track.id)
+                                            }
+                                            .padding(horizontal = 11.dp, vertical = 7.dp)
+                                    ) {
+                                        Text(
+                                            text = lbl,
+                                            color = if (active) Color.White else colors.textMuted,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+
+                                trimmedRingtones.forEach { clip ->
+                                    val active = selectedRingId == clip.id
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(CircleShape)
+                                            .background(if (active) colors.primary else colors.cardBg)
+                                            .border(
+                                                1.dp,
+                                                if (active) colors.primary else colors.borderSoft,
+                                                CircleShape
+                                            )
+                                            .clickable {
+                                                selectedRingId = clip.id
+                                                onPreviewRingtone(clip.id)
+                                            }
+                                            .padding(horizontal = 11.dp, vertical = 7.dp)
+                                    ) {
+                                        Text(
+                                            text = clip.name,
+                                            color = if (active) Color.White else colors.textMuted,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     Spacer(Modifier.height(10.dp))
 
                     Box(
@@ -494,54 +714,20 @@ fun TaskEditorSheet(
 
                     Spacer(Modifier.height(10.dp))
                     Text(
-                        text = "3D",
+                        text = if (lang == "en") "Categorized Photo Folders" else "مجلدات الصور (فواكه • خضروات • جيم • شخصيات)",
                         color = colors.primary,
                         fontSize = 11.5.sp,
                         fontWeight = FontWeight.ExtraBold
                     )
-                    Spacer(Modifier.height(6.dp))
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        MNotesCatalog.pixel3dPhotos.chunked(4).forEach { rowItems ->
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                rowItems.forEach { item ->
-                                    val selected = draftImgUri == item.uri
-                                    val label = if (lang == "en") item.nameEn else item.nameAr
-                                    Box(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .aspectRatio(1f)
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .background(if (selected) colors.primarySoft else colors.bgMain)
-                                            .border(
-                                                1.5.dp,
-                                                if (selected) colors.primary else colors.borderSoft,
-                                                RoundedCornerShape(12.dp)
-                                            )
-                                            .clickable { onSelectDraftImg(item.uri) }
-                                            .padding(2.dp)
-                                    ) {
-                                        MNotesPhotoContent(
-                                            imgUri = item.uri,
-                                            useBannerDefaultIfBlank = false,
-                                            contentDescription = label,
-                                            modifier = Modifier
-                                                .fillMaxSize()
-                                                .clip(RoundedCornerShape(9.dp))
-                                        )
-                                    }
-                                }
-                                repeat(4 - rowItems.size) {
-                                    Spacer(Modifier.weight(1f))
-                                }
-                            }
-                        }
-                    }
+                    Spacer(Modifier.height(8.dp))
+                    CategorizedBuiltInPhotosBrowser(
+                        lang = lang,
+                        selectedUri = draftImgUri,
+                        columns = 3,
+                        defaultCategory = "gym",
+                        showLabels = true,
+                        onSelectUri = onSelectDraftImg
+                    )
 
                     val enabledLibrary = libraryPhotos.filter { it.enabled }
                     if (enabledLibrary.isNotEmpty()) {
@@ -556,12 +742,12 @@ fun TaskEditorSheet(
                                     modifier = Modifier
                                         .weight(1f)
                                         .aspectRatio(1f)
-                                        .clip(RoundedCornerShape(14.dp))
+                                        .clip(CircleShape)
                                         .background(if (selected) colors.primarySoft else colors.bgMain)
                                         .border(
-                                            1.5.dp,
+                                            if (selected) 2.dp else 1.5.dp,
                                             if (selected) colors.primary else colors.borderSoft,
-                                            RoundedCornerShape(14.dp)
+                                            CircleShape
                                         )
                                         .clickable { onSelectDraftImg(item.filePath) }
                                         .padding(3.dp)
@@ -572,7 +758,7 @@ fun TaskEditorSheet(
                                         contentDescription = item.name,
                                         modifier = Modifier
                                             .fillMaxSize()
-                                            .clip(RoundedCornerShape(10.dp))
+                                            .clip(CircleShape)
                                     )
                                 }
                             }
@@ -593,6 +779,7 @@ fun TaskEditorSheet(
                                 selectedDays,
                                 alertEnabled,
                                 draftImgUri,
+                                selectedRingId,
                                 false
                             )
                         },
@@ -625,6 +812,7 @@ fun TaskEditorSheet(
                                     selectedDays,
                                     alertEnabled,
                                     draftImgUri,
+                                    selectedRingId,
                                     true
                                 )
                             },

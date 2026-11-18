@@ -148,6 +148,10 @@ class MNotesViewModel(
         )
     }
 
+    fun showMessage(msg: String) {
+        _toastMessage.tryEmit(msg)
+    }
+
     fun updatePreference(updates: Map<String, Any>, triggerAutoBackup: Boolean = false) {
         viewModelScope.launch {
             val res = localStore.updatePreferences(updates)
@@ -223,7 +227,7 @@ class MNotesViewModel(
         val dueTask = tasks.firstOrNull { task ->
             task.alertEnabled &&
                 task.alertTime == hm &&
-                (task.nextDueDate.isBlank() || task.nextDueDate <= today) &&
+                task.isActiveOnDate() &&
                 task.lastAlertedDate != today
         } ?: return
 
@@ -236,9 +240,19 @@ class MNotesViewModel(
     fun showAlert(task: SmartTask, previewOnly: Boolean) {
         _isAlertPreview.value = previewOnly
         _activeAlertTask.value = task
-        val activeRingId = preferences.value.activeRingId
+        val activeRingId = task.ringId.ifBlank { preferences.value.activeRingId }
         val customPath = trimmedRingtones.value.firstOrNull { it.id == activeRingId }?.filePath
         soundEngine.startAlertRingtoneLoop(activeRingId, customPath)
+    }
+
+    fun previewRingtoneId(ringId: String) {
+        val targetId = ringId.ifBlank { preferences.value.activeRingId }
+        val customClip = trimmedRingtones.value.firstOrNull { it.id == targetId }
+        if (customClip != null) {
+            soundEngine.playSavedFileOnce(customClip.filePath)
+        } else {
+            soundEngine.playGymTrackOnce(targetId)
+        }
     }
 
     fun previewAlertStyle(styleId: String) {
@@ -326,6 +340,7 @@ class MNotesViewModel(
         weekDays: List<Long>,
         alertEnabled: Boolean,
         imgUri: String,
+        ringId: String = "",
         triggerAlertAfterSave: Boolean = false
     ) {
         val cleanTitle = title.trim()
@@ -333,18 +348,24 @@ class MNotesViewModel(
         playSound("done")
 
         val lang = preferences.value.lang
+        val distinctDays = weekDays.distinct().sorted()
+        val effectiveRepeat = when {
+            distinctDays.isNotEmpty() && repeatMode != RepeatMode.CYCLE -> RepeatMode.WEEKLY
+            repeatMode == RepeatMode.NONE && distinctDays.isNotEmpty() -> RepeatMode.WEEKLY
+            else -> repeatMode
+        }
         val parsedSteps = cycleStepsRaw
             .split(',', '،')
             .map { it.trim() }
             .filter { it.isNotEmpty() }
             .take(20)
-        val finalSteps = if (repeatMode == RepeatMode.CYCLE) {
+        val finalSteps = if (effectiveRepeat == RepeatMode.CYCLE) {
             parsedSteps.ifEmpty { listOf("Legs", "Push", "Pull") }
         } else {
             emptyList()
         }
-        val finalDays = if (repeatMode == RepeatMode.WEEKLY || repeatMode == RepeatMode.CYCLE) {
-            weekDays.distinct().sorted()
+        val finalDays = if (effectiveRepeat == RepeatMode.WEEKLY || effectiveRepeat == RepeatMode.CYCLE) {
+            distinctDays
         } else {
             emptyList()
         }
@@ -362,7 +383,7 @@ class MNotesViewModel(
             title = cleanTitle,
             meta = finalMeta,
             imgUri = imgUri,
-            repeatMode = repeatMode.wire,
+            repeatMode = effectiveRepeat.wire,
             cycleSteps = finalSteps,
             cycleIndex = editingTask?.cycleIndex ?: 0L,
             weekDays = finalDays,
@@ -370,6 +391,7 @@ class MNotesViewModel(
             alertTime = alertTime,
             nextDueDate = finalDate,
             lastAlertedDate = "",
+            ringId = ringId,
             sortOrder = editingTask?.sortOrder ?: System.currentTimeMillis()
         )
 
@@ -427,18 +449,122 @@ class MNotesViewModel(
         }
     }
 
-    fun saveQuickRequest(title: String, body: String) {
+    fun saveQuickRequest(
+        title: String,
+        body: String,
+        docType: String = preferences.value.reqDefaultDocType,
+        customerName: String = "",
+        amountText: String = "",
+        stampId: String = "none",
+        isSigned: Boolean = false,
+        signatureName: String = preferences.value.reqSignatureName,
+        statusDot: String = "none",
+        statusLabel: String = preferences.value.reqDefaultStatusLabel,
+        splitMode: String = preferences.value.reqDefaultSplitMode,
+        isChecklistOrder: Boolean = false
+    ) {
         val t = title.trim()
         val b = body.trim()
-        if (t.isEmpty() && b.isEmpty()) return
+        val c = customerName.trim()
+        if (t.isEmpty() && b.isEmpty() && c.isEmpty()) return
         playSound("done")
-        val finalTitle = t.ifEmpty { AppStrings.get(preferences.value.lang, "reqTab") }
+        val finalTitle = t.ifEmpty {
+            if (isChecklistOrder) b.lineSequence().firstOrNull().orEmpty().take(40)
+            else c.ifEmpty { AppStrings.get(preferences.value.lang, "reqTab") }
+        }.ifEmpty { AppStrings.get(preferences.value.lang, "reqTab") }
+
+        val autoCompleteStamps = setOf("paid_thanks", "paid_thanks_green", "done", "paid_full", "received", "arrived", "ready", "complete")
+        val effectiveSigned = isSigned || (preferences.value.reqAutoSignOnComplete && stampId in autoCompleteStamps && signatureName.isNotBlank())
+
+        val req = QuickRequest(
+            title = finalTitle,
+            body = b,
+            docType = docType,
+            customerName = c,
+            amountText = amountText.trim(),
+            stampId = stampId,
+            isSigned = effectiveSigned,
+            signatureName = signatureName.trim(),
+            statusDot = statusDot,
+            statusLabel = statusLabel.trim(),
+            splitMode = splitMode,
+            isChecklistOrder = isChecklistOrder
+        )
         viewModelScope.launch {
-            val res = localStore.createRequest(finalTitle, b)
+            val res = localStore.createRequest(req)
             if (res.isFailure) {
                 _toastMessage.tryEmit(res.exceptionOrNull()?.localizedMessage ?: "Failed to save request")
             } else if (preferences.value.autoBackup && auth.currentUser != null) {
                 runCloudBackup(isAuto = true)
+            }
+        }
+    }
+
+    fun toggleRequestDot(requestId: String, targetDot: String) {
+        playSound("nav")
+        viewModelScope.launch {
+            localStore.updateRequest(requestId) { cur ->
+                val nextDot = if (cur.statusDot == targetDot) "none" else targetDot
+                val nextStatus = when (nextDot) {
+                    "green" -> if (cur.statusLabel in setOf("", "غير متاح", "لم يصل", "غير مكتمل")) "وصل / متاح" else cur.statusLabel
+                    "red" -> if (cur.statusLabel in setOf("", "متاح", "وصل", "جاهز", "وصل / متاح")) "لم يصل / غير متاح" else cur.statusLabel
+                    else -> cur.statusLabel
+                }
+                val nextStamp = when {
+                    nextDot == "green" && cur.stampId in setOf("none", "unpaid", "incomplete") -> "paid_thanks"
+                    nextDot == "red" && cur.stampId in setOf("none", "paid_thanks", "done", "arrived", "complete") -> "unpaid"
+                    else -> cur.stampId
+                }
+                val sigName = cur.signatureName.ifBlank { preferences.value.reqSignatureName }
+                val completeStamps = setOf("paid_thanks", "paid_thanks_green", "done", "paid_full", "received", "arrived", "ready", "complete")
+                val autoSigned = cur.isSigned || (preferences.value.reqAutoSignOnComplete && nextStamp in completeStamps && sigName.isNotBlank())
+                cur.copy(
+                    statusDot = nextDot,
+                    statusLabel = nextStatus,
+                    stampId = nextStamp,
+                    isSigned = autoSigned,
+                    signatureName = sigName
+                )
+            }
+        }
+    }
+
+    fun updateRequestStamp(requestId: String, stampId: String) {
+        playSound("done")
+        viewModelScope.launch {
+            localStore.updateRequest(requestId) { cur ->
+                val sigName = cur.signatureName.ifBlank { preferences.value.reqSignatureName }
+                val completeStamps = setOf("paid_thanks", "paid_thanks_green", "done", "paid_full", "received", "arrived", "ready", "complete")
+                val autoSigned = cur.isSigned || (preferences.value.reqAutoSignOnComplete && stampId in completeStamps && sigName.isNotBlank())
+                cur.copy(
+                    stampId = stampId,
+                    isSigned = autoSigned,
+                    signatureName = sigName
+                )
+            }
+        }
+    }
+
+    fun toggleRequestSignature(requestId: String, customName: String = "") {
+        playSound("done")
+        viewModelScope.launch {
+            localStore.updateRequest(requestId) { cur ->
+                val resolvedName = customName.trim().ifBlank {
+                    cur.signatureName.ifBlank { preferences.value.reqSignatureName }
+                }
+                cur.copy(
+                    isSigned = !cur.isSigned,
+                    signatureName = resolvedName
+                )
+            }
+        }
+    }
+
+    fun updateRequestStatusLabel(requestId: String, label: String) {
+        playSound("nav")
+        viewModelScope.launch {
+            localStore.updateRequest(requestId) { cur ->
+                cur.copy(statusLabel = label.trim())
             }
         }
     }
@@ -551,8 +677,13 @@ class MNotesViewModel(
                 bannerTitle = p.bannerTitle,
                 bannerSub = p.bannerSub,
                 bannerImgSize = p.bannerImgSize,
+                bannerImgDp = p.bannerImgDp,
                 bannerPhotoShape = p.bannerPhotoShape,
                 taskImgSize = p.taskImgSize,
+                taskImgDp = p.taskImgDp,
+                alertImgDp = p.alertImgDp,
+                textScalePercent = p.textScalePercent,
+                cardScalePercent = p.cardScalePercent,
                 cardShape = p.cardShape,
                 showBanner = p.showBanner,
                 showTopBarTabs = p.showTopBarTabs,
@@ -577,7 +708,25 @@ class MNotesViewModel(
                 autoBackup = p.autoBackup,
                 refreshRateHz = p.refreshRateHz,
                 layoutStyle = p.layoutStyle,
-                appIconId = p.appIconId
+                appIconId = p.appIconId,
+                reqSignatureName = p.reqSignatureName,
+                reqDefaultDocType = p.reqDefaultDocType,
+                reqDefaultSplitMode = p.reqDefaultSplitMode,
+                reqDefaultStatusLabel = p.reqDefaultStatusLabel,
+                reqCustomStatuses = p.reqCustomStatuses,
+                reqAutoSignOnComplete = p.reqAutoSignOnComplete,
+                reqShowDocTabs = p.reqShowDocTabs,
+                reqShowStamps = p.reqShowStamps,
+                reqShowSignature = p.reqShowSignature,
+                reqShowSplitControls = p.reqShowSplitControls,
+                reqShowOrdersSection = p.reqShowOrdersSection,
+                reqShowRedGreenDots = p.reqShowRedGreenDots,
+                reqShowStatusBadge = p.reqShowStatusBadge,
+                reqShowCustomer = p.reqShowCustomer,
+                reqShowAmount = p.reqShowAmount,
+                reqShowDate = p.reqShowDate,
+                reqShowHeaderBadge = p.reqShowHeaderBadge,
+                reqDefaultStampId = p.reqDefaultStampId
             ),
             tasks = tasks.map {
                 BackupTaskDto(
@@ -592,11 +741,25 @@ class MNotesViewModel(
                     alertTime = it.alertTime,
                     nextDueDate = it.nextDueDate,
                     lastAlertedDate = it.lastAlertedDate,
+                    ringId = it.ringId,
                     sortOrder = it.sortOrder
                 )
             },
             requests = requests.map {
-                BackupRequestDto(title = it.title, body = it.body)
+                BackupRequestDto(
+                    title = it.title,
+                    body = it.body,
+                    docType = it.docType,
+                    customerName = it.customerName,
+                    amountText = it.amountText,
+                    stampId = it.stampId,
+                    isSigned = it.isSigned,
+                    signatureName = it.signatureName,
+                    statusDot = it.statusDot,
+                    statusLabel = it.statusLabel,
+                    splitMode = it.splitMode,
+                    isChecklistOrder = it.isChecklistOrder
+                )
             }
         )
     }

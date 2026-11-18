@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -16,6 +17,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccessTime
+import androidx.compose.material.icons.rounded.Bedtime
+import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
@@ -24,15 +27,20 @@ import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.localization.AppStrings
+import com.example.model.RepeatMode
 import com.example.model.SmartTask
+import com.example.ui.theme.LocalMNotesCardScale
 import com.example.ui.theme.LocalMNotesColors
+import com.example.ui.theme.LocalMNotesTextScale
 import com.example.ui.theme.LocalMNotesWeight
 
 @Composable
@@ -41,6 +49,7 @@ fun TaskCard(
     lang: String,
     cardShape: String,
     taskImgSize: String,
+    taskImgDp: Int = 48,
     isDemo: Boolean = false,
     onPhotoClick: () -> Unit = {},
     onEditClick: () -> Unit = {},
@@ -48,7 +57,12 @@ fun TaskCard(
 ) {
     val colors = LocalMNotesColors.current
     val titleWeight = LocalMNotesWeight.current
-    val imgDp = taskImageDp(taskImgSize)
+    val textScale = LocalMNotesTextScale.current
+    val cardScale = LocalMNotesCardScale.current
+    val imgDp = taskImageDp(taskImgSize, taskImgDp)
+
+    val isResting = !isDemo && !task.isActiveOnDate()
+    val isActiveScheduled = !isDemo && !isResting && (task.repeat != RepeatMode.NONE || task.usesWeekDays())
 
     val dayLabels = AppStrings.dayNames(lang)
     val subParts = buildList {
@@ -83,23 +97,40 @@ fun TaskCard(
     }
 
     val horizontalPad = when (cardShape) {
-        "capsule" -> 6.dp
-        "strip" -> 0.dp
-        else -> 10.dp
+        "capsule" -> (8f * cardScale).dp
+        "strip" -> 4.dp
+        else -> (10f * cardScale).dp
     }
     val verticalPad = when (cardShape) {
-        "capsule" -> 5.dp
-        "strip" -> 0.dp
-        else -> 8.dp
+        "capsule" -> (6f * cardScale).dp
+        "strip" -> 4.dp
+        else -> (9f * cardScale).dp
+    }
+
+    val cardBg = when {
+        isDemo -> colors.cardBg
+        isResting -> colors.bgMain.copy(alpha = 0.72f)
+        isActiveScheduled -> colors.cardBg
+        else -> colors.bgMain
+    }
+    val borderColor = when {
+        isResting -> colors.borderSoft.copy(alpha = 0.85f)
+        isActiveScheduled -> colors.primary.copy(alpha = 0.42f)
+        else -> colors.borderSoft
     }
 
     Surface(
         shape = RoundedCornerShape(cardRadius),
-        color = if (isDemo) colors.cardBg else colors.bgMain,
+        color = cardBg,
+        shadowElevation = if (isActiveScheduled) 3.dp else 0.dp,
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(cardRadius))
-            .border(1.dp, colors.borderSoft, RoundedCornerShape(cardRadius))
+            .border(
+                width = if (isActiveScheduled) 1.4.dp else 1.dp,
+                color = borderColor,
+                shape = RoundedCornerShape(cardRadius)
+            )
             .then(if (!isDemo) Modifier.clickable { onEditClick() } else Modifier)
     ) {
         Row(
@@ -118,27 +149,96 @@ fun TaskCard(
                     size = imgDp,
                     shapeId = photoShape,
                     useBannerDefaultIfBlank = false,
+                    isActiveGlow = !isDemo && !isResting,
+                    isResting = isResting,
                     contentDescription = task.title,
                     onClick = if (isDemo) null else onPhotoClick
                 )
-                Spacer(Modifier.width(10.dp))
-                Column(modifier = Modifier.weight(1f)) {
+                Spacer(Modifier.width(12.dp))
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .alpha(if (isResting) 0.82f else 1f)
+                ) {
                     Text(
                         text = task.title,
-                        color = colors.textDark,
-                        fontSize = 13.5.sp,
+                        color = if (isResting) colors.textMuted else colors.textDark,
+                        fontSize = (13.5f * textScale).sp,
+                        lineHeight = (19f * textScale).sp,
                         fontWeight = titleWeight,
-                        maxLines = 1,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
                     if (subtitle.isNotBlank()) {
                         Text(
                             text = subtitle,
                             color = colors.textMuted,
-                            fontSize = 11.sp,
-                            maxLines = 1,
+                            fontSize = (11f * textScale).sp,
+                            lineHeight = (16f * textScale).sp,
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis
                         )
+                    }
+                    if (isResting) {
+                        val nextDay = task.nextScheduledDayLabel(dayLabels)
+                        val restText = if (lang == "en") {
+                            if (nextDay.isNotBlank()) "Zzz • Resting today • Next: $nextDay" else "Zzz • Resting today"
+                        } else {
+                            if (nextDay.isNotBlank()) "Zzz • راحة اليوم • القادم: $nextDay" else "Zzz • راحة اليوم"
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(Color(0xFFE2E8F0).copy(alpha = 0.7f))
+                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Bedtime,
+                                    contentDescription = null,
+                                    tint = Color(0xFF475569),
+                                    modifier = Modifier.size(11.dp)
+                                )
+                                Text(
+                                    text = restText,
+                                    color = Color(0xFF475569),
+                                    fontSize = (9.5f * textScale).sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    } else if (isActiveScheduled) {
+                        Spacer(Modifier.height(4.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(colors.primarySoft)
+                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(3.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Bolt,
+                                    contentDescription = null,
+                                    tint = colors.primary,
+                                    modifier = Modifier.size(11.dp)
+                                )
+                                Text(
+                                    text = if (lang == "en") "Active Today" else "نشطة اليوم",
+                                    color = colors.primary,
+                                    fontSize = (9.5f * textScale).sp,
+                                    fontWeight = FontWeight.ExtraBold
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -151,10 +251,10 @@ fun TaskCard(
                             .minimumInteractiveComponentSize()
                             .size(34.dp)
                             .clip(CircleShape)
-                            .background(if (task.alertEnabled) colors.primarySoft else colors.cardBg)
+                            .background(if (task.alertEnabled && !isResting) colors.primarySoft else colors.cardBg)
                             .border(
                                 1.dp,
-                                if (task.alertEnabled) colors.primary else colors.borderSoft,
+                                if (task.alertEnabled && !isResting) colors.primary else colors.borderSoft,
                                 CircleShape
                             )
                             .clickable(onClick = onEditClick)
@@ -164,7 +264,7 @@ fun TaskCard(
                         Icon(
                             imageVector = Icons.Rounded.AccessTime,
                             contentDescription = AppStrings.get(lang, "editTask"),
-                            tint = if (task.alertEnabled) colors.primary else colors.textMuted,
+                            tint = if (task.alertEnabled && !isResting) colors.primary else colors.textMuted,
                             modifier = Modifier.size(16.dp)
                         )
                     }
@@ -192,3 +292,4 @@ fun TaskCard(
         }
     }
 }
+

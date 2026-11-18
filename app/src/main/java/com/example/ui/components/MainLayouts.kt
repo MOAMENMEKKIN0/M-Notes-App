@@ -62,8 +62,10 @@ import com.example.model.RepeatMode
 import com.example.model.SmartTask
 import com.example.model.UserPreferences
 import com.example.ui.UiState
+import com.example.ui.theme.LocalMNotesCardScale
 import com.example.ui.theme.LocalMNotesColors
 import com.example.ui.theme.LocalMNotesRefreshHz
+import com.example.ui.theme.LocalMNotesTextScale
 import com.example.ui.theme.motionDurationMsForHz
 import java.time.LocalDate
 import java.time.LocalTime
@@ -85,38 +87,44 @@ fun TasksWorkspaceRouter(
     searchQuery: String,
     onSearchChange: (String) -> Unit,
     onBannerPhotoClick: () -> Unit,
+    onBannerBodyClick: () -> Unit,
     onAddTaskClick: () -> Unit,
     onTaskPhotoClick: (String) -> Unit,
     onTaskEditClick: (SmartTask) -> Unit,
     onTaskDeleteClick: (String) -> Unit,
-    onPreviewTaskAlert: (SmartTask) -> Unit
+    onPreviewTaskAlert: (SmartTask) -> Unit,
+    onOpenOverview: (Int?) -> Unit,
+    onOpenRequestsPage: () -> Unit
 ) {
     val dur = motionDurationMsForHz(LocalMNotesRefreshHz.current)
     var activeFilter by remember { mutableStateOf(TaskFilter.ALL) }
 
+    val todayDate = LocalDate.now()
     val today = AppStrings.todayStr()
     val q = searchQuery.trim().lowercase()
     val dueTasks = remember(allTasks, q, activeFilter, today) {
-        allTasks.filter { t ->
-            val dueMatch = t.nextDueDate.isBlank() || t.nextDueDate <= today
-            val queryMatch = q.isEmpty() ||
-                t.title.lowercase().contains(q) ||
-                t.meta.lowercase().contains(q) ||
-                t.currentCycleLabel().lowercase().contains(q)
-            val filterMatch = when (activeFilter) {
-                TaskFilter.ALL -> true
-                TaskFilter.GYM -> t.repeat == RepeatMode.CYCLE ||
-                    t.title.contains("جيم") ||
-                    t.title.contains("تمرين") ||
-                    t.title.lowercase().contains("gym")
-                TaskFilter.ALERTS -> t.alertEnabled && t.alertTime.isNotBlank()
-                TaskFilter.DAILY -> t.repeat == RepeatMode.DAILY
+        allTasks
+            .filter { t ->
+                val queryMatch = q.isEmpty() ||
+                    t.title.lowercase().contains(q) ||
+                    t.meta.lowercase().contains(q) ||
+                    t.currentCycleLabel().lowercase().contains(q)
+                val filterMatch = when (activeFilter) {
+                    TaskFilter.ALL -> true
+                    TaskFilter.GYM -> t.repeat == RepeatMode.CYCLE ||
+                        t.usesWeekDays() ||
+                        t.title.contains("جيم") ||
+                        t.title.contains("تمرين") ||
+                        t.title.lowercase().contains("gym")
+                    TaskFilter.ALERTS -> t.alertEnabled && t.alertTime.isNotBlank()
+                    TaskFilter.DAILY -> t.repeat == RepeatMode.DAILY || t.usesWeekDays()
+                }
+                queryMatch && filterMatch
             }
-            dueMatch && queryMatch && filterMatch
-        }
+            .sortedByDescending { it.isActiveOnDate(todayDate) }
     }
     val dueTodayTotal = remember(allTasks, today) {
-        allTasks.count { it.nextDueDate.isBlank() || it.nextDueDate <= today }
+        allTasks.count { it.isActiveOnDate(todayDate) }
     }
 
     Crossfade(
@@ -138,10 +146,14 @@ fun TasksWorkspaceRouter(
                 onFilterChange = { activeFilter = it },
                 onSearchChange = onSearchChange,
                 onBannerPhotoClick = onBannerPhotoClick,
+                onBannerBodyClick = onBannerBodyClick,
                 onAddTaskClick = onAddTaskClick,
                 onTaskPhotoClick = onTaskPhotoClick,
                 onTaskEditClick = onTaskEditClick,
-                onTaskDeleteClick = onTaskDeleteClick
+                onTaskDeleteClick = onTaskDeleteClick,
+                onPreviewTaskAlert = onPreviewTaskAlert,
+                onOpenOverview = onOpenOverview,
+                onOpenRequestsPage = onOpenRequestsPage
             )
             "L3" -> TasksWorkspaceL3(
                 prefs = prefs,
@@ -155,11 +167,13 @@ fun TasksWorkspaceRouter(
                 onFilterChange = { activeFilter = it },
                 onSearchChange = onSearchChange,
                 onBannerPhotoClick = onBannerPhotoClick,
+                onBannerBodyClick = onBannerBodyClick,
                 onAddTaskClick = onAddTaskClick,
                 onTaskPhotoClick = onTaskPhotoClick,
                 onTaskEditClick = onTaskEditClick,
                 onTaskDeleteClick = onTaskDeleteClick,
-                onPreviewTaskAlert = onPreviewTaskAlert
+                onPreviewTaskAlert = onPreviewTaskAlert,
+                onOpenOverview = onOpenOverview
             )
             else -> TasksWorkspaceL1(
                 prefs = prefs,
@@ -173,11 +187,14 @@ fun TasksWorkspaceRouter(
                 onFilterChange = { activeFilter = it },
                 onSearchChange = onSearchChange,
                 onBannerPhotoClick = onBannerPhotoClick,
+                onBannerBodyClick = onBannerBodyClick,
                 onAddTaskClick = onAddTaskClick,
                 onTaskPhotoClick = onTaskPhotoClick,
                 onTaskEditClick = onTaskEditClick,
                 onTaskDeleteClick = onTaskDeleteClick,
-                onPreviewTaskAlert = onPreviewTaskAlert
+                onPreviewTaskAlert = onPreviewTaskAlert,
+                onOpenOverview = onOpenOverview,
+                onOpenRequestsPage = onOpenRequestsPage
             )
         }
     }
@@ -199,13 +216,18 @@ private fun TasksWorkspaceL1(
     onFilterChange: (TaskFilter) -> Unit,
     onSearchChange: (String) -> Unit,
     onBannerPhotoClick: () -> Unit,
+    onBannerBodyClick: () -> Unit,
     onAddTaskClick: () -> Unit,
     onTaskPhotoClick: (String) -> Unit,
     onTaskEditClick: (SmartTask) -> Unit,
     onTaskDeleteClick: (String) -> Unit,
-    onPreviewTaskAlert: (SmartTask) -> Unit
+    onPreviewTaskAlert: (SmartTask) -> Unit,
+    onOpenOverview: (Int?) -> Unit,
+    onOpenRequestsPage: () -> Unit
 ) {
     val colors = LocalMNotesColors.current
+    val textScale = LocalMNotesTextScale.current
+    val cardScale = LocalMNotesCardScale.current
     val lang = prefs.lang
     val completedCount = (allTasks.size - dueTodayTotal).coerceAtLeast(0)
     val totalCount = allTasks.size.coerceAtLeast(1)
@@ -222,7 +244,8 @@ private fun TasksWorkspaceL1(
             HeroBanner(
                 prefs = prefs,
                 dueTodayCount = dueTodayTotal,
-                onBannerPhotoClick = onBannerPhotoClick
+                onBannerPhotoClick = onBannerPhotoClick,
+                onBannerBodyClick = onBannerBodyClick
             )
         }
 
@@ -238,12 +261,16 @@ private fun TasksWorkspaceL1(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(14.dp),
+                        .padding((14f * cardScale).dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Box(
-                        modifier = Modifier.size(66.dp),
+                        modifier = Modifier
+                            .size((66f * cardScale.coerceIn(0.85f, 1.35f)).dp)
+                            .clip(CircleShape)
+                            .clickable { onOpenOverview(null) }
+                            .testTag("home_progress_circle"),
                         contentAlignment = Alignment.Center
                     ) {
                         Canvas(modifier = Modifier.fillMaxSize()) {
@@ -267,13 +294,13 @@ private fun TasksWorkspaceL1(
                             Text(
                                 text = "$dueTodayTotal",
                                 color = colors.textDark,
-                                fontSize = 17.sp,
+                                fontSize = (17f * textScale).sp,
                                 fontWeight = FontWeight.ExtraBold
                             )
                             Text(
                                 text = if (lang == "en") "due" else "لليوم",
                                 color = colors.textMuted,
-                                fontSize = 9.5.sp,
+                                fontSize = (9.5f * textScale).sp,
                                 fontWeight = FontWeight.Bold
                             )
                         }
@@ -286,17 +313,24 @@ private fun TasksWorkspaceL1(
                         Text(
                             text = if (lang == "en") "Today's Focus" else "نبض اليوم الذكي",
                             color = colors.textDark,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.ExtraBold
+                            fontSize = (14f * textScale).sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { onOpenOverview(null) }
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             StatMiniChip(
                                 icon = Icons.Rounded.FitnessCenter,
-                                label = if (lang == "en") "${cycleTasks.size} Cycles" else "${cycleTasks.size} دورات"
+                                label = if (lang == "en") "${cycleTasks.size} Cycles" else "${cycleTasks.size} دورات",
+                                onClick = {
+                                    onFilterChange(if (activeFilter == TaskFilter.GYM) TaskFilter.ALL else TaskFilter.GYM)
+                                }
                             )
                             StatMiniChip(
                                 icon = Icons.Rounded.Bolt,
-                                label = if (lang == "en") "$requestsCount Notes" else "$requestsCount طلبات"
+                                label = if (lang == "en") "$requestsCount Notes" else "$requestsCount طلبات",
+                                onClick = onOpenRequestsPage
                             )
                         }
                         val firstCycle = cycleTasks.firstOrNull()
@@ -308,10 +342,13 @@ private fun TasksWorkspaceL1(
                                     "الدور الحالي: ${firstCycle.currentCycleLabel()}"
                                 },
                                 color = colors.primary,
-                                fontSize = 11.sp,
+                                fontSize = (11f * textScale).sp,
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { onTaskEditClick(firstCycle) }
                             )
                         }
                     }
@@ -339,6 +376,7 @@ private fun TasksWorkspaceL1(
             prefs = prefs,
             dueTasks = dueTasks,
             tasksState = tasksState,
+            onDuePillClick = { onOpenOverview(null) },
             onTaskPhotoClick = onTaskPhotoClick,
             onTaskEditClick = onTaskEditClick,
             onTaskDeleteClick = onTaskDeleteClick
@@ -425,12 +463,19 @@ private fun TasksWorkspaceL2(
     onFilterChange: (TaskFilter) -> Unit,
     onSearchChange: (String) -> Unit,
     onBannerPhotoClick: () -> Unit,
+    onBannerBodyClick: () -> Unit,
     onAddTaskClick: () -> Unit,
     onTaskPhotoClick: (String) -> Unit,
     onTaskEditClick: (SmartTask) -> Unit,
-    onTaskDeleteClick: (String) -> Unit
+    onTaskDeleteClick: (String) -> Unit,
+    onPreviewTaskAlert: (SmartTask) -> Unit,
+    onOpenOverview: (Int?) -> Unit,
+    onOpenRequestsPage: () -> Unit
 ) {
     val colors = LocalMNotesColors.current
+    val textScale = LocalMNotesTextScale.current
+    val cardScale = LocalMNotesCardScale.current
+    val bannerDp = bannerImageDp(prefs.bannerImgSize, prefs.bannerImgDp)
     val lang = prefs.lang
     val nextTaskWithTime = remember(dueTasks) {
         dueTasks.firstOrNull { it.alertTime.isNotBlank() } ?: dueTasks.firstOrNull()
@@ -472,12 +517,13 @@ private fun TasksWorkspaceL2(
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.weight(1f)
                         ) {
                             Box {
                                 MediaAvatarSlot(
                                     imgUri = prefs.bannerImg,
-                                    size = 54.dp,
+                                    size = bannerDp,
                                     shapeId = prefs.bannerPhotoShape,
                                     useBannerDefaultIfBlank = true,
                                     contentDescription = prefs.bannerTitle,
@@ -490,26 +536,41 @@ private fun TasksWorkspaceL2(
                                         .clip(CircleShape)
                                         .background(colors.primary)
                                         .border(2.dp, colors.cardBg, CircleShape)
+                                        .clickable(onClick = onBannerPhotoClick)
                                 )
                             }
-                            Column {
+                            Column(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .clickable(onClick = onBannerBodyClick)
+                                    .padding(vertical = 2.dp)
+                            ) {
                                 Text(
                                     text = prefs.bannerTitle.ifBlank { AppStrings.get(lang, "appName") },
                                     color = colors.textDark,
-                                    fontSize = 15.sp,
+                                    fontSize = (15f * textScale).sp,
                                     fontWeight = FontWeight.ExtraBold
                                 )
                                 Text(
-                                    text = nextTaskWithTime?.title ?: AppStrings.get(lang, "curTasks"),
+                                    text = prefs.bannerSub.ifBlank { nextTaskWithTime?.title ?: AppStrings.get(lang, "curTasks") },
                                     color = colors.textMuted,
-                                    fontSize = 11.5.sp,
-                                    maxLines = 1,
+                                    fontSize = (11.5f * textScale).sp,
+                                    maxLines = 2,
                                     overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
 
-                        Column(horizontalAlignment = Alignment.End) {
+                        Column(
+                            horizontalAlignment = Alignment.End,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable {
+                                    if (nextTaskWithTime != null) onPreviewTaskAlert(nextTaskWithTime)
+                                    else onOpenOverview(null)
+                                }
+                                .padding(horizontal = 4.dp, vertical = 2.dp)
+                        ) {
                             Row(
                                 verticalAlignment = Alignment.Bottom,
                                 horizontalArrangement = Arrangement.spacedBy(5.dp)
@@ -517,21 +578,21 @@ private fun TasksWorkspaceL2(
                                 Text(
                                     text = heroUnit,
                                     color = colors.primary,
-                                    fontSize = 12.sp,
+                                    fontSize = (12f * textScale).sp,
                                     fontWeight = FontWeight.ExtraBold,
                                     modifier = Modifier.padding(bottom = 5.dp)
                                 )
                                 Text(
                                     text = heroNumber,
                                     color = colors.textDark,
-                                    fontSize = 30.sp,
+                                    fontSize = (30f * textScale).sp,
                                     fontWeight = FontWeight.ExtraBold
                                 )
                             }
                             Text(
                                 text = if (lang == "en") "Total Today: $dueTodayTotal" else "إجمالي مهام اليوم: $dueTodayTotal",
                                 color = colors.textMuted,
-                                fontSize = 11.sp
+                                fontSize = (11f * textScale).sp
                             )
                         }
                     }
@@ -549,21 +610,25 @@ private fun TasksWorkspaceL2(
                             modifier = Modifier
                                 .weight(1f)
                                 .border(1.dp, colors.borderSoft, RoundedCornerShape(18.dp))
+                                .clip(RoundedCornerShape(18.dp))
+                                .clickable {
+                                    onFilterChange(if (activeFilter == TaskFilter.GYM) TaskFilter.ALL else TaskFilter.GYM)
+                                }
                         ) {
                             Column(
-                                modifier = Modifier.padding(14.dp),
+                                modifier = Modifier.padding((14f * cardScale).dp),
                                 verticalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 Text(
                                     text = "$cycleTasksCount ${if (lang == "en") "Active" else "نشطة"}",
                                     color = colors.textDark,
-                                    fontSize = 17.sp,
+                                    fontSize = (17f * textScale).sp,
                                     fontWeight = FontWeight.ExtraBold
                                 )
                                 Text(
                                     text = if (lang == "en") "Gym & Rotation" else "دورات الجيم والتكرار",
                                     color = colors.textMuted,
-                                    fontSize = 11.5.sp
+                                    fontSize = (11.5f * textScale).sp
                                 )
                             }
                         }
@@ -575,21 +640,23 @@ private fun TasksWorkspaceL2(
                             modifier = Modifier
                                 .weight(1f)
                                 .border(1.dp, colors.borderSoft, RoundedCornerShape(18.dp))
+                                .clip(RoundedCornerShape(18.dp))
+                                .clickable { onOpenRequestsPage() }
                         ) {
                             Column(
-                                modifier = Modifier.padding(14.dp),
+                                modifier = Modifier.padding((14f * cardScale).dp),
                                 verticalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 Text(
                                     text = "${allTasks.size + requestsCount} ${if (lang == "en") "Items" else "عنصر"}",
                                     color = colors.textDark,
-                                    fontSize = 17.sp,
+                                    fontSize = (17f * textScale).sp,
                                     fontWeight = FontWeight.ExtraBold
                                 )
                                 Text(
                                     text = if (lang == "en") "Tasks & Requests" else "إجمالي المهام والطلبات",
                                     color = colors.textMuted,
-                                    fontSize = 11.5.sp
+                                    fontSize = (11.5f * textScale).sp
                                 )
                             }
                         }
@@ -608,7 +675,7 @@ private fun TasksWorkspaceL2(
                 .border(1.dp, colors.borderSoft, RoundedCornerShape(26.dp))
         ) {
             Column(
-                modifier = Modifier.padding(14.dp),
+                modifier = Modifier.padding((14f * cardScale).dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Row(
@@ -619,8 +686,11 @@ private fun TasksWorkspaceL2(
                     Text(
                         text = AppStrings.get(lang, "curTasks"),
                         color = colors.textDark,
-                        fontSize = 15.5.sp,
-                        fontWeight = FontWeight.ExtraBold
+                        fontSize = (15.5f * textScale).sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { onOpenOverview(null) }
                     )
                     if (prefs.showQuickDock) {
                         Surface(
@@ -639,7 +709,11 @@ private fun TasksWorkspaceL2(
                 }
 
                 if (prefs.showWeekStrip) {
-                    WeekStripRow(lang = lang, allTasks = allTasks)
+                    WeekStripRow(
+                        lang = lang,
+                        allTasks = allTasks,
+                        onDayClick = { dayIdx -> onOpenOverview(dayIdx) }
+                    )
                 }
 
                 if (prefs.showSearchBar) {
@@ -689,13 +763,18 @@ private fun TasksWorkspaceL3(
     onFilterChange: (TaskFilter) -> Unit,
     onSearchChange: (String) -> Unit,
     onBannerPhotoClick: () -> Unit,
+    onBannerBodyClick: () -> Unit,
     onAddTaskClick: () -> Unit,
     onTaskPhotoClick: (String) -> Unit,
     onTaskEditClick: (SmartTask) -> Unit,
     onTaskDeleteClick: (String) -> Unit,
-    onPreviewTaskAlert: (SmartTask) -> Unit
+    onPreviewTaskAlert: (SmartTask) -> Unit,
+    onOpenOverview: (Int?) -> Unit
 ) {
     val colors = LocalMNotesColors.current
+    val textScale = LocalMNotesTextScale.current
+    val bannerDp = bannerImageDp(prefs.bannerImgSize, prefs.bannerImgDp)
+    val taskDp = taskImageDp(prefs.taskImgSize, prefs.taskImgDp)
     val lang = prefs.lang
     val spotlightTask = dueTasks.firstOrNull() ?: allTasks.firstOrNull()
 
@@ -711,6 +790,7 @@ private fun TasksWorkspaceL3(
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(24.dp))
                     .border(1.dp, colors.borderSoft, RoundedCornerShape(24.dp))
+                    .clickable(onClick = onBannerBodyClick)
             ) {
                 Canvas(modifier = Modifier.matchParentSize()) {
                     drawRect(
@@ -750,7 +830,7 @@ private fun TasksWorkspaceL3(
                     ) {
                         MediaAvatarSlot(
                             imgUri = prefs.bannerImg,
-                            size = 54.dp,
+                            size = bannerDp,
                             shapeId = prefs.bannerPhotoShape,
                             useBannerDefaultIfBlank = true,
                             contentDescription = prefs.bannerTitle,
@@ -761,20 +841,24 @@ private fun TasksWorkspaceL3(
                             Text(
                                 text = prefs.bannerTitle.ifBlank { AppStrings.get(lang, "appName") },
                                 color = Color.White,
-                                fontSize = 17.sp,
+                                fontSize = (17f * textScale).sp,
                                 fontWeight = FontWeight.ExtraBold,
-                                maxLines = 1,
+                                maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = if (lang == "en") {
-                                    "$dueTodayTotal active today • $requestsCount requests"
-                                } else {
-                                    "$dueTodayTotal مهام نشطة اليوم • $requestsCount طلبات"
+                                text = prefs.bannerSub.ifBlank {
+                                    if (lang == "en") {
+                                        "$dueTodayTotal active today • $requestsCount requests"
+                                    } else {
+                                        "$dueTodayTotal مهام نشطة اليوم • $requestsCount طلبات"
+                                    }
                                 },
                                 color = Color.White.copy(alpha = 0.9f),
-                                fontSize = 11.5.sp,
-                                fontWeight = FontWeight.Bold
+                                fontSize = (11.5f * textScale).sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
@@ -826,7 +910,7 @@ private fun TasksWorkspaceL3(
                             Text(
                                 text = if (lang == "en") "UP NEXT SPOTLIGHT" else "المهمة القادمة الآن",
                                 color = colors.primary,
-                                fontSize = 10.5.sp,
+                                fontSize = (10.5f * textScale).sp,
                                 fontWeight = FontWeight.ExtraBold
                             )
                         }
@@ -844,7 +928,7 @@ private fun TasksWorkspaceL3(
                                 Text(
                                     text = AppStrings.formatTime(spotlightTask.alertTime, lang),
                                     color = colors.textDark,
-                                    fontSize = 11.5.sp,
+                                    fontSize = (11.5f * textScale).sp,
                                     fontWeight = FontWeight.Bold
                                 )
                             }
@@ -857,7 +941,7 @@ private fun TasksWorkspaceL3(
                     ) {
                         MediaAvatarSlot(
                             imgUri = spotlightTask.imgUri,
-                            size = 56.dp,
+                            size = taskDp,
                             shapeId = prefs.cardShape,
                             useBannerDefaultIfBlank = false,
                             contentDescription = spotlightTask.title,
@@ -867,9 +951,9 @@ private fun TasksWorkspaceL3(
                             Text(
                                 text = spotlightTask.title,
                                 color = colors.textDark,
-                                fontSize = 15.5.sp,
+                                fontSize = (15.5f * textScale).sp,
                                 fontWeight = FontWeight.ExtraBold,
-                                maxLines = 1,
+                                maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
                             )
                             val detail = listOf(
@@ -880,8 +964,8 @@ private fun TasksWorkspaceL3(
                                 Text(
                                     text = detail,
                                     color = colors.textMuted,
-                                    fontSize = 12.sp,
-                                    maxLines = 1,
+                                    fontSize = (12f * textScale).sp,
+                                    maxLines = 2,
                                     overflow = TextOverflow.Ellipsis
                                 )
                             }
@@ -931,7 +1015,11 @@ private fun TasksWorkspaceL3(
         }
 
         if (prefs.showWeekStrip) {
-            WeekStripRow(lang = lang, allTasks = allTasks)
+            WeekStripRow(
+                lang = lang,
+                allTasks = allTasks,
+                onDayClick = { dayIdx -> onOpenOverview(dayIdx) }
+            )
         }
 
         if (prefs.showSearchBar) {
@@ -954,6 +1042,7 @@ private fun TasksWorkspaceL3(
             prefs = prefs,
             dueTasks = dueTasks,
             tasksState = tasksState,
+            onDuePillClick = { onOpenOverview(null) },
             onTaskPhotoClick = onTaskPhotoClick,
             onTaskEditClick = onTaskEditClick,
             onTaskDeleteClick = onTaskDeleteClick
@@ -968,12 +1057,17 @@ private fun TasksWorkspaceL3(
    ========================================================================= */
 
 @Composable
-private fun StatMiniChip(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String) {
+private fun StatMiniChip(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit = {}
+) {
     val colors = LocalMNotesColors.current
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(999.dp))
             .background(colors.primarySoft)
+            .clickable(onClick = onClick)
             .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -1028,7 +1122,11 @@ private fun TaskFilterBar(
 }
 
 @Composable
-private fun WeekStripRow(lang: String, allTasks: List<SmartTask>) {
+private fun WeekStripRow(
+    lang: String,
+    allTasks: List<SmartTask>,
+    onDayClick: (Int) -> Unit = {}
+) {
     val colors = LocalMNotesColors.current
     val labels = AppStrings.dayNames(lang)
     val todayJsDay = (LocalDate.now().dayOfWeek.value % 7).toLong()
@@ -1053,6 +1151,7 @@ private fun WeekStripRow(lang: String, allTasks: List<SmartTask>) {
                         if (isToday) colors.primary else colors.borderSoft,
                         RoundedCornerShape(12.dp)
                     )
+                    .clickable { onDayClick(idx) }
                     .padding(vertical = 6.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(3.dp)
@@ -1135,11 +1234,14 @@ private fun TasksListCard(
     prefs: UserPreferences,
     dueTasks: List<SmartTask>,
     tasksState: UiState<List<SmartTask>>,
+    onDuePillClick: () -> Unit = {},
     onTaskPhotoClick: (String) -> Unit,
     onTaskEditClick: (SmartTask) -> Unit,
     onTaskDeleteClick: (String) -> Unit
 ) {
     val colors = LocalMNotesColors.current
+    val textScale = LocalMNotesTextScale.current
+    val cardScale = LocalMNotesCardScale.current
     val lang = prefs.lang
     Surface(
         shape = RoundedCornerShape(22.dp),
@@ -1150,7 +1252,7 @@ private fun TasksListCard(
             .border(1.dp, colors.borderSoft, RoundedCornerShape(22.dp))
     ) {
         Column(
-            modifier = Modifier.padding(14.dp),
+            modifier = Modifier.padding((14f * cardScale).dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Row(
@@ -1161,19 +1263,27 @@ private fun TasksListCard(
                 Text(
                     text = AppStrings.get(lang, "curTasks"),
                     color = colors.textDark,
-                    fontSize = 14.5.sp,
+                    fontSize = (14.5f * textScale).sp,
                     fontWeight = FontWeight.ExtraBold
                 )
+                val activeCount = dueTasks.count { it.isActiveOnDate() }
+                val restingCount = (dueTasks.size - activeCount).coerceAtLeast(0)
+                val pillLabel = when {
+                    restingCount > 0 && lang == "en" -> "$activeCount active • $restingCount Zzz"
+                    restingCount > 0 -> "$activeCount نشط • $restingCount راحة"
+                    else -> "$activeCount ${AppStrings.get(lang, "forToday")}"
+                }
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(999.dp))
                         .background(colors.primarySoft)
+                        .clickable(onClick = onDuePillClick)
                         .padding(horizontal = 10.dp, vertical = 4.dp)
                 ) {
                     Text(
-                        text = "${dueTasks.size} ${AppStrings.get(lang, "forToday")}",
+                        text = pillLabel,
                         color = colors.primary,
-                        fontSize = 11.5.sp,
+                        fontSize = (11.5f * textScale).sp,
                         fontWeight = FontWeight.ExtraBold
                     )
                 }
@@ -1201,6 +1311,7 @@ private fun TasksListInner(
     onTaskDeleteClick: (String) -> Unit
 ) {
     val colors = LocalMNotesColors.current
+    val textScale = LocalMNotesTextScale.current
     val lang = prefs.lang
     when (tasksState) {
         is UiState.Loading -> {
@@ -1217,7 +1328,7 @@ private fun TasksListInner(
             Text(
                 text = tasksState.message,
                 color = Color(0xFFEF4444),
-                fontSize = 12.5.sp,
+                fontSize = (12.5f * textScale).sp,
                 textAlign = TextAlign.Center,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1229,7 +1340,7 @@ private fun TasksListInner(
                 Text(
                     text = AppStrings.get(lang, "allDone"),
                     color = colors.textMuted,
-                    fontSize = 12.5.sp,
+                    fontSize = (12.5f * textScale).sp,
                     textAlign = TextAlign.Center,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1243,6 +1354,7 @@ private fun TasksListInner(
                             lang = lang,
                             cardShape = prefs.cardShape,
                             taskImgSize = prefs.taskImgSize,
+                            taskImgDp = prefs.taskImgDp,
                             onPhotoClick = { onTaskPhotoClick(task.id) },
                             onEditClick = { onTaskEditClick(task) },
                             onDeleteClick = { onTaskDeleteClick(task.id) }

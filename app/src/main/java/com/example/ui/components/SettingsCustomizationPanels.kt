@@ -30,12 +30,18 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -61,6 +67,8 @@ import com.example.model.UserPreferences
 import com.example.ui.MNotesViewModel
 import com.example.ui.theme.LocalMNotesColors
 import com.example.util.LauncherIconManager
+import kotlinx.coroutines.delay
+import kotlin.math.roundToInt
 
 private data class ColorSwatchOption(
     val hex: String,
@@ -127,6 +135,231 @@ fun HomeScreenControlsContent(
                     viewModel.updatePreference(mapOf(key to checked))
                 }
             )
+        }
+
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = if (lang == "en") "Home Banner Titles" else "تعديل عنوان ونص الترويسة الرئيسية",
+            color = colors.textMuted,
+            fontSize = 11.5.sp,
+            fontWeight = FontWeight.ExtraBold
+        )
+
+        var homeBannerTitle by remember(prefs.bannerTitle) { mutableStateOf(prefs.bannerTitle) }
+        var homeBannerSub by remember(prefs.bannerSub) { mutableStateOf(prefs.bannerSub) }
+
+        LaunchedEffect(homeBannerTitle) {
+            if (homeBannerTitle != prefs.bannerTitle) {
+                delay(400L)
+                viewModel.updatePreference(mapOf("bannerTitle" to homeBannerTitle))
+            }
+        }
+        LaunchedEffect(homeBannerSub) {
+            if (homeBannerSub != prefs.bannerSub) {
+                delay(400L)
+                viewModel.updatePreference(mapOf("bannerSub" to homeBannerSub))
+            }
+        }
+
+        OutlinedTextField(
+            value = homeBannerTitle,
+            onValueChange = { homeBannerTitle = it },
+            label = { Text(if (lang == "en") "Main Header Title" else "العنوان الرئيسي في الواجهة", fontSize = 11.5.sp) },
+            singleLine = true,
+            shape = RoundedCornerShape(14.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = colors.primary,
+                unfocusedBorderColor = colors.borderSoft
+            ),
+            modifier = Modifier.fillMaxWidth()
+        )
+        OutlinedTextField(
+            value = homeBannerSub,
+            onValueChange = { homeBannerSub = it },
+            label = { Text(if (lang == "en") "Subtitle / Description" else "النص الفرعي أسفل العنوان", fontSize = 11.5.sp) },
+            singleLine = true,
+            shape = RoundedCornerShape(14.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = colors.primary,
+                unfocusedBorderColor = colors.borderSoft
+            ),
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = if (lang == "en") "Open-Ended Size Sliders (Photos, Cards & Text)" else "شريط التحكم في الأحجام والكتابة (تصغير أو تكبير فوق الكبير)",
+            color = colors.textMuted,
+            fontSize = 11.5.sp,
+            fontWeight = FontWeight.ExtraBold
+        )
+
+        SizeControlSliderRow(
+            title = if (lang == "en") "Banner Photo Size" else "حجم صورة الترويسة (البانر)",
+            value = prefs.bannerImgDp.toFloat(),
+            valueRange = 28f..170f,
+            unitSuffix = "dp",
+            defaultValue = 54,
+            lang = lang,
+            testTag = "slider_home_banner_img",
+            onValueCommitted = { viewModel.updatePreference(mapOf("bannerImgDp" to it)) }
+        )
+
+        SizeControlSliderRow(
+            title = if (lang == "en") "Task Photo Size" else "حجم صورة بطاقة المهمة",
+            value = prefs.taskImgDp.toFloat(),
+            valueRange = 28f..150f,
+            unitSuffix = "dp",
+            defaultValue = 48,
+            lang = lang,
+            testTag = "slider_home_task_img",
+            onValueCommitted = { viewModel.updatePreference(mapOf("taskImgDp" to it)) }
+        )
+
+        SizeControlSliderRow(
+            title = if (lang == "en") "Alert Overlay Photo Size" else "حجم الصورة في إشعار التنبيه",
+            value = prefs.alertImgDp.toFloat(),
+            valueRange = 44f..220f,
+            unitSuffix = "dp",
+            defaultValue = 120,
+            lang = lang,
+            testTag = "slider_home_alert_img",
+            onValueCommitted = { viewModel.updatePreference(mapOf("alertImgDp" to it)) }
+        )
+
+        SizeControlSliderRow(
+            title = if (lang == "en") "Global Text & Titles Size" else "حجم الكتابة والعناوين في التطبيق",
+            value = prefs.textScalePercent.toFloat(),
+            valueRange = 75f..185f,
+            unitSuffix = "%",
+            defaultValue = 100,
+            lang = lang,
+            testTag = "slider_home_text_scale",
+            onValueCommitted = { viewModel.updatePreference(mapOf("textScalePercent" to it)) }
+        )
+
+        SizeControlSliderRow(
+            title = if (lang == "en") "Cards Height & Spacing" else "ارتفاع البطاقات والمسافات",
+            value = prefs.cardScalePercent.toFloat(),
+            valueRange = 80f..160f,
+            unitSuffix = "%",
+            defaultValue = 100,
+            lang = lang,
+            testTag = "slider_home_card_scale",
+            onValueCommitted = { viewModel.updatePreference(mapOf("cardScalePercent" to it)) }
+        )
+    }
+}
+
+@Composable
+fun SizeControlSliderRow(
+    title: String,
+    value: Float,
+    valueRange: ClosedFloatingPointRange<Float>,
+    unitSuffix: String,
+    defaultValue: Int,
+    lang: String,
+    testTag: String,
+    onValueCommitted: (Int) -> Unit
+) {
+    val colors = LocalMNotesColors.current
+    var liveValue by remember(value) { mutableFloatStateOf(value.coerceIn(valueRange.start, valueRange.endInclusive)) }
+
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = colors.bgMain,
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, colors.borderSoft, RoundedCornerShape(16.dp))
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = title,
+                    color = colors.textDark,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    modifier = Modifier.weight(1f)
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(colors.primarySoft)
+                            .padding(horizontal = 10.dp, vertical = 3.dp)
+                    ) {
+                        Text(
+                            text = "${liveValue.roundToInt()} $unitSuffix",
+                            color = colors.primary,
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    }
+                    if (liveValue.roundToInt() != defaultValue) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(colors.cardBg)
+                                .border(1.dp, colors.borderSoft, RoundedCornerShape(999.dp))
+                                .clickable {
+                                    liveValue = defaultValue.toFloat()
+                                    onValueCommitted(defaultValue)
+                                }
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                        ) {
+                            Text(
+                                text = if (lang == "en") "Reset" else "افتراضي",
+                                color = colors.textMuted,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+
+            Slider(
+                value = liveValue,
+                onValueChange = { liveValue = it },
+                onValueChangeFinished = { onValueCommitted(liveValue.roundToInt()) },
+                valueRange = valueRange,
+                colors = SliderDefaults.colors(
+                    thumbColor = colors.primary,
+                    activeTrackColor = colors.primary,
+                    inactiveTrackColor = colors.borderSoft
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag(testTag)
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = if (lang == "en") "Smaller" else "أصغر",
+                    color = colors.textMuted,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = if (lang == "en") "Extra Large" else "أكبر جداً",
+                    color = colors.textMuted,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
         }
     }
 }

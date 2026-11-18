@@ -25,11 +25,10 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.RotateRight
 import androidx.compose.material.icons.rounded.AddPhotoAlternate
@@ -105,6 +104,7 @@ fun PhotoPickerSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
             Row(
@@ -172,84 +172,62 @@ fun PhotoPickerSheet(
                     Spacer(Modifier.height(12.dp))
 
                     Text(
-                        text = "3D",
+                        text = if (lang == "en") "Photo Folders" else "مجلدات صور البرنامج",
                         color = colors.primary,
                         fontSize = 12.5.sp,
                         fontWeight = FontWeight.ExtraBold
                     )
 
-                    Spacer(Modifier.height(6.dp))
+                    Spacer(Modifier.height(8.dp))
 
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(3),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.height(245.dp)
-                    ) {
-                        items(MNotesCatalog.pixel3dPhotos, key = { it.uri }) { item ->
-                            val label = if (lang == "en") item.nameEn else item.nameAr
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .border(1.5.dp, colors.borderSoft, RoundedCornerShape(12.dp))
-                                    .clickable { onSelectFromLibrary(item.uri) }
-                                    .padding(4.dp)
-                            ) {
-                                MNotesPhotoContent(
-                                    imgUri = item.uri,
-                                    useBannerDefaultIfBlank = false,
-                                    contentDescription = label,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .aspectRatio(1f)
-                                        .clip(RoundedCornerShape(9.dp))
-                                )
-                                Spacer(Modifier.height(3.dp))
-                                Text(
-                                    text = label,
-                                    color = colors.textDark,
-                                    fontSize = 9.5.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 1
-                                )
-                            }
-                        }
-                    }
+                    CategorizedBuiltInPhotosBrowser(
+                        lang = lang,
+                        selectedUri = "",
+                        columns = 3,
+                        defaultCategory = "gym",
+                        showLabels = true,
+                        onSelectUri = onSelectFromLibrary
+                    )
 
                     val enabledPhotos = libraryPhotos.filter { it.enabled }
                     if (enabledPhotos.isNotEmpty()) {
-                        Spacer(Modifier.height(10.dp))
+                        Spacer(Modifier.height(12.dp))
                         Text(
-                            text = AppStrings.get(lang, "orApp"),
+                            text = if (lang == "en") "My Uploaded Photos" else "مجلد صوري المرفوعة",
                             color = colors.textMuted,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.ExtraBold
                         )
-                        Spacer(Modifier.height(6.dp))
-                        LazyVerticalGrid(
-                            columns = GridCells.Fixed(4),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.height(100.dp)
-                        ) {
-                            items(enabledPhotos, key = { it.id }) { item ->
-                                Box(
-                                    modifier = Modifier
-                                        .aspectRatio(1f)
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .border(1.5.dp, colors.borderSoft, RoundedCornerShape(12.dp))
-                                        .clickable { onSelectFromLibrary(item.filePath) }
-                                        .padding(2.dp)
+                        Spacer(Modifier.height(8.dp))
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            enabledPhotos.chunked(4).forEach { rowItems ->
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    MNotesPhotoContent(
-                                        imgUri = item.filePath,
-                                        useBannerDefaultIfBlank = false,
-                                        contentDescription = item.name,
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .clip(RoundedCornerShape(10.dp))
-                                    )
+                                    rowItems.forEach { item ->
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .aspectRatio(1f)
+                                                .clip(CircleShape)
+                                                .border(1.5.dp, colors.borderSoft, CircleShape)
+                                                .clickable { onSelectFromLibrary(item.filePath) }
+                                                .padding(2.dp)
+                                        ) {
+                                            MNotesPhotoContent(
+                                                imgUri = item.filePath,
+                                                useBannerDefaultIfBlank = false,
+                                                contentDescription = item.name,
+                                                modifier = Modifier
+                                                    .fillMaxSize()
+                                                    .clip(CircleShape)
+                                            )
+                                        }
+                                    }
+                                    repeat(4 - rowItems.size) {
+                                        Spacer(Modifier.weight(1f))
+                                    }
                                 }
                             }
                         }
