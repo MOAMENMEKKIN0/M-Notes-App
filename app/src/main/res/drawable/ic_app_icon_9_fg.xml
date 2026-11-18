@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Baby Blue Circle medallion -->
+    <path
+        android:fillColor="#38BDF8"
+        android:pathData="M54,22 A32,32 0 1,0 54,86 A32,32 0 1,0 54,22 Z" />
+    <!-- Small white reminder bell chime -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,29 C51.2,29 49.5,31 49.5,33.5 L49.5,35.8 L48,37.2 L60,37.2 L58.5,35.8 L58.5,33.5 C58.5,31 56.8,29 54,29 Z" />
+    <!-- Pure white M -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M39,70 L39,44 L46,44 L54,57 L62,44 L69,44 L69,70 L63,70 L63,53 L55.5,65.5 L52.5,65.5 L45,53 L45,70 Z" />
+</vector>

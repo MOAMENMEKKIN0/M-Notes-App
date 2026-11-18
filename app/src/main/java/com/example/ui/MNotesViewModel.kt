@@ -1,5 +1,6 @@
 package com.example.ui
 
+import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -18,6 +19,7 @@ import com.example.model.RepeatMode
 import com.example.model.SmartTask
 import com.example.model.TrimmedRingtone
 import com.example.model.UserPreferences
+import com.example.util.LauncherIconManager
 import com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.auth
@@ -155,6 +157,44 @@ class MNotesViewModel(
                 runCloudBackup(isAuto = true)
             }
         }
+    }
+
+    fun changeLauncherIcon(context: Context, iconId: String) {
+        val ok = LauncherIconManager.applyLauncherIcon(context, iconId)
+        playSound(if (ok) "done" else "exit")
+        updatePreference(mapOf("appIconId" to iconId))
+        val msg = if (preferences.value.lang == "en") {
+            "Home screen icon updated! Launcher may take a moment to refresh."
+        } else {
+            "تم تغيير أيقونة التطبيق الخارجية بنجاح! قد يستغرق اللانشر ثوانٍ للتحديث"
+        }
+        _toastMessage.tryEmit(msg)
+    }
+
+    fun createCustomShortcut(
+        context: Context,
+        shapeId: String,
+        symbolId: String,
+        bgColorArgb: Int,
+        fgColorArgb: Int,
+        badgeColorArgb: Int
+    ) {
+        val ok = LauncherIconManager.pinCustomColoredShortcut(
+            context = context,
+            shapeId = shapeId,
+            symbolId = symbolId,
+            bgColorArgb = bgColorArgb,
+            fgColorArgb = fgColorArgb,
+            badgeColorArgb = badgeColorArgb,
+            shortLabel = preferences.value.bannerTitle.ifBlank { "M Notes" }
+        )
+        playSound(if (ok) "done" else "exit")
+        val msg = if (preferences.value.lang == "en") {
+            if (ok) "Custom colored icon prompt opened!" else "Launcher does not support pinned shortcuts"
+        } else {
+            if (ok) "تم تجهيز أيقونتك المخصصة بألوانك لإضافتها على الشاشة الرئيسية" else "مشغل الهاتف الحالي لا يدعم اختصارات الشاشة المخصصة"
+        }
+        _toastMessage.tryEmit(msg)
     }
 
     fun rollOverdueWeekdayTasks(tasks: List<SmartTask>) {
@@ -515,6 +555,17 @@ class MNotesViewModel(
                 taskImgSize = p.taskImgSize,
                 cardShape = p.cardShape,
                 showBanner = p.showBanner,
+                showTopBarTabs = p.showTopBarTabs,
+                showStatsSummary = p.showStatsSummary,
+                showWeekStrip = p.showWeekStrip,
+                showSpotlightCard = p.showSpotlightCard,
+                showFilterChips = p.showFilterChips,
+                showSearchBar = p.showSearchBar,
+                showQuickDock = p.showQuickDock,
+                customPrimaryHex = p.customPrimaryHex,
+                customBgHex = p.customBgHex,
+                customAccentHex = p.customAccentHex,
+                customIconShape = p.customIconShape,
                 soundNav = p.soundNav,
                 soundEnter = p.soundEnter,
                 soundExit = p.soundExit,
@@ -523,7 +574,10 @@ class MNotesViewModel(
                 swipeClose = p.swipeClose,
                 hapticEnabled = p.hapticEnabled,
                 activeRingId = p.activeRingId,
-                autoBackup = p.autoBackup
+                autoBackup = p.autoBackup,
+                refreshRateHz = p.refreshRateHz,
+                layoutStyle = p.layoutStyle,
+                appIconId = p.appIconId
             ),
             tasks = tasks.map {
                 BackupTaskDto(

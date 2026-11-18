@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Pure white organic blob on warm beige -->
+    <path
+        android:fillColor="#FFFDF9"
+        android:pathData="M56,21 C76,21 87,35 85,55 C83,74 71,86 50,86 C31,86 21,72 22,50 C23,30 37,21 56,21 Z" />
+    <!-- Reminder note top bar -->
+    <path
+        android:fillColor="#9A5B25"
+        android:pathData="M40,34 L68,34 C69.5,34 70.5,35 70.5,36.5 C70.5,38 69.5,39 68,39 L40,39 C38.5,39 37.5,38 37.5,36.5 C37.5,35 38.5,34 40,34 Z" />
+    <!-- Caramel brown M -->
+    <path
+        android:fillColor="#8B4F21"
+        android:pathData="M39,71 L39,45 L46,45 L54,58 L62,45 L69,45 L69,71 L63,71 L63,54 L55.5,66.5 L52.5,66.5 L45,54 L45,71 Z" />
+</vector>

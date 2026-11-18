@@ -18,6 +18,19 @@ import com.example.model.MNotesCatalog
 
 val LocalMNotesColors = staticCompositionLocalOf { MNotesCatalog.themes.first() }
 val LocalMNotesWeight = staticCompositionLocalOf { FontWeight.SemiBold }
+val LocalMNotesRefreshHz = staticCompositionLocalOf { 120 }
+
+fun motionStiffnessForHz(hz: Int): Float = when (hz) {
+    120 -> 1500f
+    90 -> 950f
+    else -> 520f
+}
+
+fun motionDurationMsForHz(hz: Int): Int = when (hz) {
+    120 -> 110
+    90 -> 165
+    else -> 240
+}
 
 fun fontFamilyForId(fontId: String): FontFamily = when (fontId) {
     "tajawal" -> FontFamily(Font(R.font.tajawal, FontWeight.Normal))
@@ -32,14 +45,41 @@ fun fontWeightForValue(weight: Long): FontWeight = when (weight) {
     else -> FontWeight.SemiBold
 }
 
+private fun parseHexOrNull(hex: String): Color? {
+    val clean = hex.trim()
+    if (clean.isEmpty()) return null
+    return runCatching {
+        Color(android.graphics.Color.parseColor(if (clean.startsWith("#")) clean else "#$clean"))
+    }.getOrNull()
+}
+
 @Composable
 fun MNotesTheme(
     themeId: String,
     fontId: String,
     fontWeightValue: Long,
+    refreshRateHz: Int = 120,
+    customPrimaryHex: String = "",
+    customBgHex: String = "",
+    customAccentHex: String = "",
     content: @Composable () -> Unit
 ) {
-    val spec = MNotesCatalog.themeById(themeId)
+    val baseSpec = MNotesCatalog.themeById(themeId)
+    val customPrimary = parseHexOrNull(customPrimaryHex)
+    val customBg = parseHexOrNull(customBgHex)
+    val customAccent = parseHexOrNull(customAccentHex)
+    val spec = baseSpec.copy(
+        primary = customPrimary ?: baseSpec.primary,
+        primarySoft = customPrimary?.copy(alpha = 0.14f) ?: baseSpec.primarySoft,
+        bgMain = customBg ?: baseSpec.bgMain,
+        bgTopGlow = customBg?.let { Color(
+            red = (it.red * 0.92f).coerceIn(0f, 1f),
+            green = (it.green * 0.96f).coerceIn(0f, 1f),
+            blue = (it.blue * 0.96f).coerceIn(0f, 1f),
+            alpha = 1f
+        ) } ?: baseSpec.bgTopGlow,
+        accent = customAccent ?: baseSpec.accent
+    )
     val fontFamily = fontFamilyForId(fontId)
     val baseWeight = fontWeightForValue(fontWeightValue)
 
@@ -114,7 +154,8 @@ fun MNotesTheme(
 
     CompositionLocalProvider(
         LocalMNotesColors provides spec,
-        LocalMNotesWeight provides baseWeight
+        LocalMNotesWeight provides baseWeight,
+        LocalMNotesRefreshHz provides refreshRateHz
     ) {
         MaterialTheme(
             colorScheme = colorScheme,

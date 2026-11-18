@@ -1,6 +1,8 @@
 package com.example.ui
 
 import android.net.Uri
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -27,15 +29,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DeleteOutline
-import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
@@ -68,14 +67,14 @@ import com.example.localization.AppStrings
 import com.example.model.QuickRequest
 import com.example.model.SmartTask
 import com.example.ui.components.AlertOverlay
-import com.example.ui.components.HeroBanner
 import com.example.ui.components.PhotoCropSheet
 import com.example.ui.components.PhotoPickerSheet
 import com.example.ui.components.SettingsSheet
-import com.example.ui.components.TaskCard
 import com.example.ui.components.TaskEditorSheet
+import com.example.ui.components.TasksWorkspaceRouter
 import com.example.ui.components.TopBarSwitcher
 import com.example.ui.theme.LocalMNotesColors
+import com.example.ui.theme.motionStiffnessForHz
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -245,18 +244,28 @@ fun MainScreen(viewModel: MNotesViewModel) {
                             }
                         }
 
-                        Spacer(Modifier.height(10.dp))
+                        if (prefs.showTopBarTabs) {
+                            Spacer(Modifier.height(10.dp))
 
-                        // Top Bar Switcher (T1, T11, T13, T18, T20)
-                        TopBarSwitcher(
-                            styleId = prefs.topBarStyle,
-                            currentPage = pagerState.currentPage,
-                            lang = lang,
-                            onSelectPage = { idx ->
-                                viewModel.playSound("nav")
-                                scope.launch { pagerState.animateScrollToPage(idx) }
-                            }
-                        )
+                            // Top Bar Switcher (T1, T11, T13, T18, T20)
+                            TopBarSwitcher(
+                                styleId = prefs.topBarStyle,
+                                currentPage = pagerState.currentPage,
+                                lang = lang,
+                                onSelectPage = { idx ->
+                                    viewModel.playSound("nav")
+                                    scope.launch {
+                                        pagerState.animateScrollToPage(
+                                            page = idx,
+                                            animationSpec = spring(
+                                                dampingRatio = Spring.DampingRatioNoBouncy,
+                                                stiffness = motionStiffnessForHz(prefs.refreshRateHz)
+                                            )
+                                        )
+                                    }
+                                }
+                            )
+                        }
 
                         Spacer(Modifier.height(12.dp))
 
@@ -267,176 +276,40 @@ fun MainScreen(viewModel: MNotesViewModel) {
                             modifier = Modifier.weight(1f)
                         ) { page ->
                             if (page == 0) {
-                                val today = AppStrings.todayStr()
-                                val q = searchQuery.trim().lowercase()
-                                val dueTasks = allTasks.filter { t ->
-                                    (t.nextDueDate.isBlank() || t.nextDueDate <= today) &&
-                                        (q.isEmpty() ||
-                                            t.title.lowercase().contains(q) ||
-                                            t.meta.lowercase().contains(q))
-                                }
-                                val dueTodayTotal = allTasks.count {
-                                    it.nextDueDate.isBlank() || it.nextDueDate <= today
-                                }
-
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .verticalScroll(rememberScrollState()),
-                                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    HeroBanner(
-                                        prefs = prefs,
-                                        dueTodayCount = dueTodayTotal,
-                                        onBannerPhotoClick = {
-                                            viewModel.playSound("enter")
-                                            photoPickTarget = PhotoPickTarget.Banner
-                                        }
-                                    )
-
-                                    // Search Pill Bar
-                                    OutlinedTextField(
-                                        value = searchQuery,
-                                        onValueChange = { viewModel.setSearchQuery(it) },
-                                        placeholder = {
-                                            Text(
-                                                text = AppStrings.get(lang, "search"),
-                                                color = colors.textMuted,
-                                                fontSize = 13.sp
-                                            )
-                                        },
-                                        leadingIcon = {
-                                            Icon(
-                                                imageVector = Icons.Rounded.Search,
-                                                contentDescription = null,
-                                                tint = colors.textMuted
-                                            )
-                                        },
-                                        trailingIcon = {
-                                            if (searchQuery.isNotEmpty()) {
-                                                IconButton(onClick = { viewModel.setSearchQuery("") }) {
-                                                    Icon(
-                                                        imageVector = Icons.Rounded.Close,
-                                                        contentDescription = AppStrings.get(lang, "close"),
-                                                        tint = colors.textMuted
-                                                    )
-                                                }
-                                            }
-                                        },
-                                        singleLine = true,
-                                        shape = RoundedCornerShape(999.dp),
-                                        colors = OutlinedTextFieldDefaults.colors(
-                                            focusedBorderColor = colors.primary,
-                                            unfocusedBorderColor = colors.borderSoft,
-                                            focusedContainerColor = colors.cardBg,
-                                            unfocusedContainerColor = colors.cardBg
-                                        ),
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .testTag("task_search_input")
-                                    )
-
-                                    // Today's Tasks Card
-                                    Surface(
-                                        shape = RoundedCornerShape(22.dp),
-                                        color = colors.cardBg,
-                                        shadowElevation = 2.dp,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .border(1.dp, colors.borderSoft, RoundedCornerShape(22.dp))
-                                    ) {
-                                        Column(
-                                            modifier = Modifier.padding(14.dp),
-                                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                                        ) {
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Text(
-                                                    text = AppStrings.get(lang, "curTasks"),
-                                                    color = colors.textDark,
-                                                    fontSize = 14.5.sp,
-                                                    fontWeight = FontWeight.ExtraBold
-                                                )
-                                                Box(
-                                                    modifier = Modifier
-                                                        .clip(RoundedCornerShape(999.dp))
-                                                        .background(colors.primarySoft)
-                                                        .padding(horizontal = 10.dp, vertical = 4.dp)
-                                                ) {
-                                                    Text(
-                                                        text = "${dueTasks.size} ${AppStrings.get(lang, "forToday")}",
-                                                        color = colors.primary,
-                                                        fontSize = 11.5.sp,
-                                                        fontWeight = FontWeight.ExtraBold
-                                                    )
-                                                }
-                                            }
-
-                                            when (val state = tasksState) {
-                                                is UiState.Loading -> {
-                                                    Box(
-                                                        modifier = Modifier
-                                                            .fillMaxWidth()
-                                                            .padding(24.dp),
-                                                        contentAlignment = Alignment.Center
-                                                    ) {
-                                                        CircularProgressIndicator(color = colors.primary)
-                                                    }
-                                                }
-                                                is UiState.Error -> {
-                                                    Text(
-                                                        text = state.message,
-                                                        color = Color(0xFFEF4444),
-                                                        fontSize = 12.5.sp,
-                                                        textAlign = TextAlign.Center,
-                                                        modifier = Modifier
-                                                            .fillMaxWidth()
-                                                            .padding(12.dp)
-                                                    )
-                                                }
-                                                is UiState.Success -> {
-                                                    if (dueTasks.isEmpty()) {
-                                                        Text(
-                                                            text = AppStrings.get(lang, "allDone"),
-                                                            color = colors.textMuted,
-                                                            fontSize = 12.5.sp,
-                                                            textAlign = TextAlign.Center,
-                                                            modifier = Modifier
-                                                                .fillMaxWidth()
-                                                                .padding(vertical = 22.dp)
-                                                        )
-                                                    } else {
-                                                        dueTasks.forEach { task ->
-                                                            TaskCard(
-                                                                task = task,
-                                                                lang = lang,
-                                                                cardShape = prefs.cardShape,
-                                                                taskImgSize = prefs.taskImgSize,
-                                                                onPhotoClick = {
-                                                                    viewModel.playSound("enter")
-                                                                    photoPickTarget = PhotoPickTarget.Task(task.id)
-                                                                },
-                                                                onEditClick = {
-                                                                    viewModel.playSound("enter")
-                                                                    editingTask = task
-                                                                    editorDraftImgUri = task.imgUri
-                                                                    showTaskEditor = true
-                                                                },
-                                                                onDeleteClick = {
-                                                                    viewModel.deleteTask(task.id)
-                                                                }
-                                                            )
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
+                                TasksWorkspaceRouter(
+                                    prefs = prefs,
+                                    allTasks = allTasks,
+                                    requestsCount = allRequests.size,
+                                    tasksState = tasksState,
+                                    searchQuery = searchQuery,
+                                    onSearchChange = { viewModel.setSearchQuery(it) },
+                                    onBannerPhotoClick = {
+                                        viewModel.playSound("enter")
+                                        photoPickTarget = PhotoPickTarget.Banner
+                                    },
+                                    onAddTaskClick = {
+                                        viewModel.playSound("enter")
+                                        editingTask = null
+                                        editorDraftImgUri = ""
+                                        showTaskEditor = true
+                                    },
+                                    onTaskPhotoClick = { taskId ->
+                                        viewModel.playSound("enter")
+                                        photoPickTarget = PhotoPickTarget.Task(taskId)
+                                    },
+                                    onTaskEditClick = { task ->
+                                        viewModel.playSound("enter")
+                                        editingTask = task
+                                        editorDraftImgUri = task.imgUri
+                                        showTaskEditor = true
+                                    },
+                                    onTaskDeleteClick = { taskId ->
+                                        viewModel.deleteTask(taskId)
+                                    },
+                                    onPreviewTaskAlert = { task ->
+                                        viewModel.showAlert(task, previewOnly = true)
                                     }
-                                    Spacer(Modifier.height(14.dp))
-                                }
+                                )
                             } else {
                                 // Page 1: Requests
                                 Column(

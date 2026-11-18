@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Floating white note card with rounded corners -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M34,26 L74,26 C78.4,26 82,29.6 82,34 L82,74 C82,78.4 78.4,82 74,82 L34,82 C29.6,82 26,78.4 26,74 L26,34 C26,29.6 29.6,26 34,26 Z" />
+    <!-- Mint reminder pill badge top right -->
+    <path
+        android:fillColor="#18C28B"
+        android:pathData="M67,31 A5.5,5.5 0 1,0 67,42 A5.5,5.5 0 1,0 67,31 Z" />
+    <!-- Mint M monogram -->
+    <path
+        android:fillColor="#10B981"
+        android:pathData="M39,71 L39,45 L46,45 L54,58 L62,45 L69,45 L69,71 L63,71 L63,54 L55.5,66.5 L52.5,66.5 L45,54 L45,71 Z" />
+</vector>

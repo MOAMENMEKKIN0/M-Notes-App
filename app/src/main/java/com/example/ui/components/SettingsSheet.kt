@@ -6,6 +6,12 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -16,6 +22,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -29,9 +36,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Logout
 import androidx.compose.material.icons.rounded.AccountCircle
+import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.Backup
 import androidx.compose.material.icons.rounded.Brush
 import androidx.compose.material.icons.rounded.ContentCut
+import androidx.compose.material.icons.rounded.DashboardCustomize
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.ExpandMore
@@ -75,15 +84,19 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.credentials.CredentialManager
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.localization.AppStrings
+import com.example.model.LauncherIconSpec
 import com.example.model.LibraryPhoto
 import com.example.model.MNotesCatalog
 import com.example.model.RepeatMode
@@ -94,8 +107,10 @@ import com.example.ui.MNotesViewModel
 import com.example.ui.auth.onGoogleSignInClicked
 import com.example.ui.auth.signOut
 import com.example.ui.theme.LocalMNotesColors
+import com.example.ui.theme.LocalMNotesRefreshHz
 import com.example.ui.theme.fontFamilyForId
 import com.example.ui.theme.fontWeightForValue
+import com.example.ui.theme.motionDurationMsForHz
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -873,6 +888,77 @@ fun SettingsSheet(
                 }
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Navigation Speed & Frame Rate (60 / 90 / 120 Hz)
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = colors.bgMain,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, colors.borderSoft, RoundedCornerShape(16.dp))
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = if (lang == "en") "Navigation Speed & Refresh Rate" else "سرعة التنقل واستجابة الشاشة (فريم/هرتز)",
+                                color = colors.textDark,
+                                fontSize = 12.5.sp,
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                            Text(
+                                text = if (lang == "en") {
+                                    "Choose between 60, 90, or 120 Hz for ultra-smooth transitions and touch response"
+                                } else {
+                                    "اختر بين ٦٠ أو ٩٠ أو ١٢٠ هرتز لسرعة التنقل والتفاعل مع الأزرار"
+                                },
+                                color = colors.textMuted,
+                                fontSize = 10.5.sp
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                listOf(
+                                    60 to (if (lang == "en") "60 Hz" else "٦٠ هرتز\nعادي"),
+                                    90 to (if (lang == "en") "90 Hz" else "٩٠ هرتز\nسريع"),
+                                    120 to (if (lang == "en") "120 Hz" else "١٢٠ هرتز\nأقصى سرعة")
+                                ).forEach { (hz, label) ->
+                                    val selected = prefs.refreshRateHz == hz
+                                    Surface(
+                                        shape = RoundedCornerShape(14.dp),
+                                        color = if (selected) colors.primary else colors.cardBg,
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(48.dp)
+                                            .border(
+                                                1.5.dp,
+                                                if (selected) colors.primary else colors.borderSoft,
+                                                RoundedCornerShape(14.dp)
+                                            )
+                                            .clip(RoundedCornerShape(14.dp))
+                                            .clickable {
+                                                viewModel.playSound("nav")
+                                                viewModel.updatePreference(mapOf("refreshRateHz" to hz))
+                                            }
+                                            .testTag("hz_${hz}_button")
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Text(
+                                                text = label,
+                                                color = if (selected) Color.White else colors.textDark,
+                                                fontSize = 11.5.sp,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                                lineHeight = 14.sp
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     SettingsSubAccordion(
                         title = AppStrings.get(lang, "sRingtones"),
                         isOpen = openSubSection == "ringtones",
@@ -1634,6 +1720,13 @@ fun SettingsSheet(
                     }
                 }
 
+                Spacer(Modifier.height(12.dp))
+                InAppCustomColorStudio(
+                    prefs = prefs,
+                    lang = lang,
+                    viewModel = viewModel
+                )
+
                 Spacer(Modifier.height(14.dp))
                 SectionMiniLabel(AppStrings.get(lang, "banIcon"))
                 ChoicePillRow(
@@ -1691,6 +1784,44 @@ fun SettingsSheet(
                         viewModel.playSound("nav")
                         viewModel.updatePreference(mapOf("cardShape" to it))
                     }
+                )
+            }
+
+            // 8. Complete Home Screen Layout & Element Visibility Controls
+            SettingsFolder(
+                title = if (lang == "en") "Home Screen Layout & Elements" else "ضبط الواجهة الرئيسية بالكامل",
+                subtitle = if (lang == "en") "Pick 1 of 3 layouts & hide or show any card on screen" else "اختيار التصميم وإخفاء أو إظهار أي جزء من الواجهة",
+                icon = Icons.Rounded.DashboardCustomize,
+                isOpen = openFolder == "homeLayout",
+                lang = lang,
+                onToggle = {
+                    viewModel.playSound("nav")
+                    openFolder = if (openFolder == "homeLayout") null else "homeLayout"
+                }
+            ) {
+                HomeScreenControlsContent(
+                    prefs = prefs,
+                    lang = lang,
+                    viewModel = viewModel
+                )
+            }
+
+            // 9. External Home-Screen App Icon Switcher & Color Studio (12 Icons + Custom Colors)
+            SettingsFolder(
+                title = if (lang == "en") "App Icons & Custom Colors" else "أيقونة الهاتف الخارجية وألوانها (١٢ شكل)",
+                subtitle = if (lang == "en") "Rounded & organic beige, mint, white, baby blue + custom" else "مدورة وعضوية للتذكير والحرف بالبيج والمينت واللبني والأبيض",
+                icon = Icons.Rounded.Apps,
+                isOpen = openFolder == "appIcon",
+                lang = lang,
+                onToggle = {
+                    viewModel.playSound("nav")
+                    openFolder = if (openFolder == "appIcon") null else "appIcon"
+                }
+            ) {
+                ExternalAppIconFolderContent(
+                    prefs = prefs,
+                    lang = lang,
+                    viewModel = viewModel
                 )
             }
 
@@ -1815,7 +1946,12 @@ private fun SettingsFolder(
                     )
                 }
             }
-            AnimatedVisibility(visible = isOpen) {
+            val dur = motionDurationMsForHz(LocalMNotesRefreshHz.current)
+            AnimatedVisibility(
+                visible = isOpen,
+                enter = expandVertically(tween(dur)) + fadeIn(tween(dur)),
+                exit = shrinkVertically(tween(dur)) + fadeOut(tween(dur))
+            ) {
                 Column(modifier = Modifier.padding(top = 12.dp)) {
                     content()
                 }
@@ -1832,6 +1968,7 @@ private fun SettingsSubAccordion(
     content: @Composable () -> Unit
 ) {
     val colors = LocalMNotesColors.current
+    val dur = motionDurationMsForHz(LocalMNotesRefreshHz.current)
     Surface(
         shape = RoundedCornerShape(16.dp),
         color = colors.bgMain,
@@ -1863,7 +2000,11 @@ private fun SettingsSubAccordion(
                     modifier = Modifier.size(18.dp)
                 )
             }
-            AnimatedVisibility(visible = isOpen) {
+            AnimatedVisibility(
+                visible = isOpen,
+                enter = expandVertically(tween(dur)) + fadeIn(tween(dur)),
+                exit = shrinkVertically(tween(dur)) + fadeOut(tween(dur))
+            ) {
                 Column(modifier = Modifier.padding(top = 10.dp)) {
                     content()
                 }

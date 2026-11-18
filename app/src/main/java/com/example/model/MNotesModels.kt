@@ -2,6 +2,7 @@ package com.example.model
 
 import androidx.annotation.Keep
 import androidx.compose.ui.graphics.Color
+import com.example.R
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId
 import com.google.firebase.firestore.IgnoreExtraProperties
@@ -90,6 +91,17 @@ data class UserPreferences(
     val taskImgSize: String = "medium",
     val cardShape: String = "ring",
     val showBanner: Boolean = true,
+    val showTopBarTabs: Boolean = true,
+    val showStatsSummary: Boolean = true,
+    val showWeekStrip: Boolean = true,
+    val showSpotlightCard: Boolean = true,
+    val showFilterChips: Boolean = true,
+    val showSearchBar: Boolean = true,
+    val showQuickDock: Boolean = true,
+    val customPrimaryHex: String = "",
+    val customBgHex: String = "",
+    val customAccentHex: String = "",
+    val customIconShape: String = "circle",
     val soundNav: Boolean = true,
     val soundEnter: Boolean = true,
     val soundExit: Boolean = true,
@@ -99,6 +111,9 @@ data class UserPreferences(
     val hapticEnabled: Boolean = true,
     val activeRingId: String = "G1",
     val autoBackup: Boolean = true,
+    val refreshRateHz: Int = 120,
+    val layoutStyle: String = "L1",
+    val appIconId: String = "I1",
     val lastBackupLabel: String = "",
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
@@ -173,6 +188,17 @@ data class BackupPreferencesDto(
     val taskImgSize: String = "medium",
     val cardShape: String = "ring",
     val showBanner: Boolean = true,
+    val showTopBarTabs: Boolean = true,
+    val showStatsSummary: Boolean = true,
+    val showWeekStrip: Boolean = true,
+    val showSpotlightCard: Boolean = true,
+    val showFilterChips: Boolean = true,
+    val showSearchBar: Boolean = true,
+    val showQuickDock: Boolean = true,
+    val customPrimaryHex: String = "",
+    val customBgHex: String = "",
+    val customAccentHex: String = "",
+    val customIconShape: String = "circle",
     val soundNav: Boolean = true,
     val soundEnter: Boolean = true,
     val soundExit: Boolean = true,
@@ -181,7 +207,10 @@ data class BackupPreferencesDto(
     val swipeClose: Boolean = true,
     val hapticEnabled: Boolean = true,
     val activeRingId: String = "G1",
-    val autoBackup: Boolean = true
+    val autoBackup: Boolean = true,
+    val refreshRateHz: Int = 120,
+    val layoutStyle: String = "L1",
+    val appIconId: String = "I1"
 )
 
 @Serializable
@@ -226,6 +255,17 @@ data class BuiltInPhotoSpec(
     val nameEn: String
 )
 
+data class LauncherIconSpec(
+    val id: String,
+    val aliasClassName: String,
+    val nameAr: String,
+    val nameEn: String,
+    val bgStart: Color,
+    val bgEnd: Color,
+    val fgDrawableRes: Int,
+    val isBitmapArt: Boolean = false
+)
+
 object MNotesCatalog {
     val themes = listOf(
         AppThemeSpec(
@@ -233,6 +273,12 @@ object MNotesCatalog {
             bgMain = Color(0xFFFAF5EE), bgTopGlow = Color(0xFFDEC1A4), cardBg = Color(0xFFFFFDF9),
             borderSoft = Color(0xFFEADBC8), textDark = Color(0xFF291408), textMuted = Color(0xFF7A563C),
             primary = Color(0xFF9A5B25), primarySoft = Color(0xFFFAF0E6), accent = Color(0xFFD97706)
+        ),
+        AppThemeSpec(
+            id = "emerald-frost", nameAr = "أبيض جليدي وأخضر زمردي", nameEn = "Emerald Frost",
+            bgMain = Color(0xFFF5F8FA), bgTopGlow = Color(0xFFDAF5EC), cardBg = Color(0xFFFFFFFF),
+            borderSoft = Color(0xFFE7EEF3), textDark = Color(0xFF0D1B2A), textMuted = Color(0xFF64748B),
+            primary = Color(0xFF10B981), primarySoft = Color(0xFFE6FBF3), accent = Color(0xFFEA580C)
         ),
         AppThemeSpec(
             id = "mint-clean", nameAr = "نعناعي صافي", nameEn = "Mint Clean",
@@ -363,4 +409,88 @@ object MNotesCatalog {
         BuiltInPhotoSpec("res://img_3d_gym_shoulders", "جيم - أكتاف (بيج)", "Gym - Shoulders"),
         BuiltInPhotoSpec("res://img_3d_gym_workout", "جيم - دمبل (فاتح)", "Gym - Dumbbells")
     )
+
+    val layoutOptions = listOf(
+        StyleOption("L1", "١ • التفاعلية الزجاجية", "1 • Frosted Interactive"),
+        StyleOption("L2", "٢ • لوحة اليوم الصافية", "2 • Clean Slate Hub"),
+        StyleOption("L3", "٣ • الطبقات المنحنية", "3 • Curved Spotlight")
+    )
+
+    val launcherIcons = listOf(
+        LauncherIconSpec(
+            id = "I1", aliasClassName = "com.example.LauncherIcon1",
+            nameAr = "١ • مينت الأساسي", nameEn = "1 • Classic Mint",
+            bgStart = Color(0xFF18C28B), bgEnd = Color(0xFF0D9488),
+            fgDrawableRes = R.drawable.ic_mnotes_foreground_art, isBitmapArt = true
+        ),
+        LauncherIconSpec(
+            id = "I2", aliasClassName = "com.example.LauncherIcon2",
+            nameAr = "٢ • مدور بيج وتذكير", nameEn = "2 • Circle Beige",
+            bgStart = Color(0xFFF5EBDD), bgEnd = Color(0xFFEADBC8),
+            fgDrawableRes = R.drawable.ic_app_icon_2_fg
+        ),
+        LauncherIconSpec(
+            id = "I3", aliasClassName = "com.example.LauncherIcon3",
+            nameAr = "٣ • عضوي مينت في أبيض", nameEn = "3 • Organic Mint-White",
+            bgStart = Color(0xFFFFFFFF), bgEnd = Color(0xFFF8FAFC),
+            fgDrawableRes = R.drawable.ic_app_icon_3_fg
+        ),
+        LauncherIconSpec(
+            id = "I4", aliasClassName = "com.example.LauncherIcon4",
+            nameAr = "٤ • مدور مينت وجرس", nameEn = "4 • Circle Mint Bell",
+            bgStart = Color(0xFF18C28B), bgEnd = Color(0xFF10B981),
+            fgDrawableRes = R.drawable.ic_app_icon_4_fg
+        ),
+        LauncherIconSpec(
+            id = "I5", aliasClassName = "com.example.LauncherIcon5",
+            nameAr = "٥ • عضوي لبني سماوي", nameEn = "5 • Organic Baby Blue",
+            bgStart = Color(0xFFEFF8FF), bgEnd = Color(0xFFD8EEFA),
+            fgDrawableRes = R.drawable.ic_app_icon_5_fg
+        ),
+        LauncherIconSpec(
+            id = "I6", aliasClassName = "com.example.LauncherIcon6",
+            nameAr = "٦ • مدور أبيض وتذكير", nameEn = "6 • Circle White Check",
+            bgStart = Color(0xFFFFFFFF), bgEnd = Color(0xFFF1F5F9),
+            fgDrawableRes = R.drawable.ic_app_icon_6_fg
+        ),
+        LauncherIconSpec(
+            id = "I7", aliasClassName = "com.example.LauncherIcon7",
+            nameAr = "٧ • عضوي بيج دافئ", nameEn = "7 • Organic Sand Beige",
+            bgStart = Color(0xFFEADBC8), bgEnd = Color(0xFFDEC6A9),
+            fgDrawableRes = R.drawable.ic_app_icon_7_fg
+        ),
+        LauncherIconSpec(
+            id = "I8", aliasClassName = "com.example.LauncherIcon8",
+            nameAr = "٨ • مينت في أبيض ناعم", nameEn = "8 • Soft Mint-Ice",
+            bgStart = Color(0xFFE6FBF3), bgEnd = Color(0xFFD1F7E8),
+            fgDrawableRes = R.drawable.ic_app_icon_8_fg
+        ),
+        LauncherIconSpec(
+            id = "I9", aliasClassName = "com.example.LauncherIcon9",
+            nameAr = "٩ • مدور لبني في أبيض", nameEn = "9 • Circle Blue-White",
+            bgStart = Color(0xFFFFFFFF), bgEnd = Color(0xFFF8FAFC),
+            fgDrawableRes = R.drawable.ic_app_icon_9_fg
+        ),
+        LauncherIconSpec(
+            id = "I10", aliasClassName = "com.example.LauncherIcon10",
+            nameAr = "١٠ • عضوي مينت جيم", nameEn = "10 • Organic Mint Gym",
+            bgStart = Color(0xFF10B981), bgEnd = Color(0xFF18C28B),
+            fgDrawableRes = R.drawable.ic_app_icon_10_fg
+        ),
+        LauncherIconSpec(
+            id = "I11", aliasClassName = "com.example.LauncherIcon11",
+            nameAr = "١١ • مدور بيج وساعة", nameEn = "11 • Circle Beige Clock",
+            bgStart = Color(0xFFFFFDF9), bgEnd = Color(0xFFF5EBDD),
+            fgDrawableRes = R.drawable.ic_app_icon_11_fg
+        ),
+        LauncherIconSpec(
+            id = "I12", aliasClassName = "com.example.LauncherIcon12",
+            nameAr = "١٢ • عضوي لبني ومينت", nameEn = "12 • Organic Mint-Sky",
+            bgStart = Color(0xFFE0F2FE), bgEnd = Color(0xFFE6FBF3),
+            fgDrawableRes = R.drawable.ic_app_icon_12_fg
+        )
+    )
+
+    fun launcherIconById(id: String): LauncherIconSpec =
+        launcherIcons.firstOrNull { it.id == id } ?: launcherIcons.first()
 }

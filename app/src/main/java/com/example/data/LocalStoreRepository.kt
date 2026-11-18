@@ -92,6 +92,17 @@ class LocalStoreRepository(private val context: Context) {
             taskImgSize = p.taskImgSize,
             cardShape = p.cardShape,
             showBanner = p.showBanner,
+            showTopBarTabs = p.showTopBarTabs,
+            showStatsSummary = p.showStatsSummary,
+            showWeekStrip = p.showWeekStrip,
+            showSpotlightCard = p.showSpotlightCard,
+            showFilterChips = p.showFilterChips,
+            showSearchBar = p.showSearchBar,
+            showQuickDock = p.showQuickDock,
+            customPrimaryHex = p.customPrimaryHex,
+            customBgHex = p.customBgHex,
+            customAccentHex = p.customAccentHex,
+            customIconShape = p.customIconShape,
             soundNav = p.soundNav,
             soundEnter = p.soundEnter,
             soundExit = p.soundExit,
@@ -101,6 +112,9 @@ class LocalStoreRepository(private val context: Context) {
             hapticEnabled = p.hapticEnabled,
             activeRingId = p.activeRingId,
             autoBackup = p.autoBackup,
+            refreshRateHz = p.refreshRateHz,
+            layoutStyle = p.layoutStyle,
+            appIconId = p.appIconId,
             lastBackupLabel = state.lastBackupLabel
         )
     }
@@ -204,6 +218,17 @@ class LocalStoreRepository(private val context: Context) {
                 "taskImgSize" -> (v as? String)?.let { p = p.copy(taskImgSize = it) }
                 "cardShape" -> (v as? String)?.let { p = p.copy(cardShape = it) }
                 "showBanner" -> (v as? Boolean)?.let { p = p.copy(showBanner = it) }
+                "showTopBarTabs" -> (v as? Boolean)?.let { p = p.copy(showTopBarTabs = it) }
+                "showStatsSummary" -> (v as? Boolean)?.let { p = p.copy(showStatsSummary = it) }
+                "showWeekStrip" -> (v as? Boolean)?.let { p = p.copy(showWeekStrip = it) }
+                "showSpotlightCard" -> (v as? Boolean)?.let { p = p.copy(showSpotlightCard = it) }
+                "showFilterChips" -> (v as? Boolean)?.let { p = p.copy(showFilterChips = it) }
+                "showSearchBar" -> (v as? Boolean)?.let { p = p.copy(showSearchBar = it) }
+                "showQuickDock" -> (v as? Boolean)?.let { p = p.copy(showQuickDock = it) }
+                "customPrimaryHex" -> (v as? String)?.let { p = p.copy(customPrimaryHex = it.take(12)) }
+                "customBgHex" -> (v as? String)?.let { p = p.copy(customBgHex = it.take(12)) }
+                "customAccentHex" -> (v as? String)?.let { p = p.copy(customAccentHex = it.take(12)) }
+                "customIconShape" -> (v as? String)?.let { p = p.copy(customIconShape = it.take(20)) }
                 "soundNav" -> (v as? Boolean)?.let { p = p.copy(soundNav = it) }
                 "soundEnter" -> (v as? Boolean)?.let { p = p.copy(soundEnter = it) }
                 "soundExit" -> (v as? Boolean)?.let { p = p.copy(soundExit = it) }
@@ -213,6 +238,13 @@ class LocalStoreRepository(private val context: Context) {
                 "hapticEnabled" -> (v as? Boolean)?.let { p = p.copy(hapticEnabled = it) }
                 "activeRingId" -> (v as? String)?.let { p = p.copy(activeRingId = it.take(100)) }
                 "autoBackup" -> (v as? Boolean)?.let { p = p.copy(autoBackup = it) }
+                "refreshRateHz" -> (v as? Number)?.toInt()?.takeIf { it in setOf(60, 90, 120) }?.let {
+                    p = p.copy(refreshRateHz = it)
+                }
+                "layoutStyle" -> (v as? String)?.takeIf { it in setOf("L1", "L2", "L3") }?.let {
+                    p = p.copy(layoutStyle = it)
+                }
+                "appIconId" -> (v as? String)?.let { p = p.copy(appIconId = it.take(12)) }
                 "lastBackupLabel" -> (v as? String)?.let { lastBackupLabel = it.take(100) }
             }
         }
@@ -331,7 +363,10 @@ class LocalStoreRepository(private val context: Context) {
             fontWeight = if (p.fontWeight in listOf(400L, 600L, 800L)) p.fontWeight else 600L,
             bannerTitle = p.bannerTitle.take(100),
             bannerSub = p.bannerSub.take(200),
-            activeRingId = p.activeRingId.take(100)
+            activeRingId = p.activeRingId.take(100),
+            refreshRateHz = if (p.refreshRateHz in setOf(60, 90, 120)) p.refreshRateHz else 120,
+            layoutStyle = if (p.layoutStyle in setOf("L1", "L2", "L3")) p.layoutStyle else "L1",
+            appIconId = p.appIconId.ifBlank { "I1" }.take(12)
         )
         val restoredTasks = snapshot.tasks.mapIndexed { idx, t: BackupTaskDto ->
             LocalTaskDto(
