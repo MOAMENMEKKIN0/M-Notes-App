@@ -86,7 +86,7 @@ private fun MNotesAppRoot() {
                             mediaRepository = mediaRepo,
                             soundEngine = soundEngine,
                             currentUserId = user.uid,
-                            userEmail = user.email.orEmpty()
+                            userEmail = user.email?.takeIf { it.isNotBlank() } ?: user.phoneNumber.orEmpty()
                         ) as T
                     }
                 }
