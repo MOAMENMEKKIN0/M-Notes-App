@@ -167,6 +167,32 @@ fun onGoogleSignInClicked(
             }
         } catch (e: GetCredentialCancellationException) {
             Log.w("Auth", "Google Sign-In flow cancelled or dismissed: ${e.message}", e)
+            val msg = e.message.orEmpty()
+            if (msg.contains("16") || msg.contains("reauth", ignoreCase = true)) {
+                try {
+                    val activity = context as? Activity
+                        ?: throw IllegalStateException("Activity context required")
+                    val fallbackOption = GetGoogleIdOption.Builder()
+                        .setFilterByAuthorizedAccounts(false)
+                        .setServerClientId(clientId)
+                        .setAutoSelectEnabled(false)
+                        .build()
+                    val fallbackReq = GetCredentialRequest.Builder()
+                        .addCredentialOption(fallbackOption)
+                        .build()
+                    val cred = credentialManager.getCredential(activity, fallbackReq).credential
+                    if (cred is CustomCredential && cred.type == TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
+                        val token = GoogleIdTokenCredential.createFrom(cred.data).idToken
+                        Firebase.auth.signInWithCredential(GoogleAuthProvider.getCredential(token, null)).await()
+                        onAuthSuccess()
+                        return@launch
+                    }
+                } catch (fallbackErr: Exception) {
+                    Log.w("Auth", "Fallback GoogleIdOption failed: ${fallbackErr.message}", fallbackErr)
+                    onAuthCancelled(fallbackErr.localizedMessage ?: e.message)
+                    return@launch
+                }
+            }
             onAuthCancelled(e.message)
         } catch (e: Exception) {
             Log.e("Auth", "Google Sign-In failed", e)
