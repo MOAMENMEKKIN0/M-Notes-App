@@ -1,12 +1,12 @@
 const firebaseConfig = {
-  apiKey: "PUT_YOUR_API_KEY_HERE",
-  authDomain: "PUT_YOUR_PROJECT.firebaseapp.com",
-  projectId: "PUT_YOUR_PROJECT_ID",
-  storageBucket: "PUT_YOUR_PROJECT.appspot.com",
-  messagingSenderId: "PUT_YOUR_SENDER_ID",
-  appId: "PUT_YOUR_APP_ID"
+  apiKey: "AIzaSyAHIjeuAsazpPq9SV3uWEMeXp2hjDEFwAY",
+  authDomain: "m-notes-3a45f.firebaseapp.com",
+  projectId: "m-notes-3a45f",
+  storageBucket: "m-notes-3a45f.firebasestorage.app",
+  messagingSenderId: "881509665525",
+  appId: "1:881509665525:web:0733b1ef0a2d569dbc53bc",
+  measurementId: "G-LV0FYWNNS7"
 };
-
 let cloudReady = false, cloudUser = null, recaptchaVerifier = null, phoneConfirmation = null;
 let backupCfg = JSON.parse(localStorage.getItem("mnotes_backup_cfg") || JSON.stringify({
   autoBackup: true, lastBackupTime: "", lastCloudTime: ""
