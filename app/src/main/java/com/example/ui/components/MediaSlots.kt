@@ -63,6 +63,32 @@ fun taskImageDp(sizeId: String): Dp = when (sizeId) {
     else -> 46.dp
 }
 
+private fun builtInDrawableForUri(uri: String): Int? = when (uri) {
+    "res://img_3d_elder_man" -> R.drawable.img_3d_elder_man_1795021150883
+    "res://img_3d_elder_beige" -> R.drawable.img_3d_elder_beige_1795021564309
+    "res://img_3d_bald_man" -> R.drawable.img_3d_bald_man_1795021150430
+    "res://img_3d_bald_brown" -> R.drawable.img_3d_bald_brown_1795021591352
+    "res://img_3d_haired_man" -> R.drawable.img_3d_haired_man_1795021151702
+    "res://img_3d_haired_mint" -> R.drawable.img_3d_haired_mint_1795021612096
+    "res://img_3d_child" -> R.drawable.img_3d_child_1795021152915
+    "res://img_3d_child_cream" -> R.drawable.img_3d_child_cream_1795021589727
+    "res://img_3d_woman" -> R.drawable.img_3d_woman_1795021154226
+    "res://img_3d_woman_beige" -> R.drawable.img_3d_woman_beige_1795021590044
+    "res://img_3d_medieval_bald" -> R.drawable.img_3d_medieval_bald_1795022190347
+    "res://img_3d_jahiliyyah" -> R.drawable.img_3d_jahiliyyah_1795022191921
+    "res://img_3d_ancient_fruits" -> R.drawable.img_3d_ancient_fruits_1795022223609
+    "res://img_3d_ancient_bread_grain" -> R.drawable.img_3d_ancient_bread_grain_1795022221497
+    "res://img_3d_gym_workout" -> R.drawable.img_3d_gym_workout_1795021155953
+    "res://img_3d_gym_chest" -> R.drawable.img_3d_gym_chest_1795021564566
+    "res://img_3d_gym_back" -> R.drawable.img_3d_gym_back_1795021563371
+    "res://img_3d_gym_legs" -> R.drawable.img_3d_gym_legs_1795021566532
+    "res://img_3d_gym_legpress" -> R.drawable.img_3d_gym_legpress_1795022190947
+    "res://img_3d_gym_lunges" -> R.drawable.img_3d_gym_lunges_1795022188475
+    "res://img_3d_gym_arms" -> R.drawable.img_3d_gym_arms_1795021588933
+    "res://img_3d_gym_shoulders" -> R.drawable.img_3d_gym_shoulders_1795021611562
+    else -> null
+}
+
 @Composable
 fun MNotesPhotoContent(
     imgUri: String,
@@ -70,7 +96,16 @@ fun MNotesPhotoContent(
     contentDescription: String?,
     modifier: Modifier = Modifier
 ) {
+    val builtInRes = builtInDrawableForUri(imgUri)
     when {
+        builtInRes != null -> {
+            Image(
+                painter = painterResource(id = builtInRes),
+                contentDescription = contentDescription,
+                contentScale = ContentScale.Crop,
+                modifier = modifier
+            )
+        }
         imgUri == "default" || (imgUri.isBlank() && useBannerDefaultIfBlank) -> {
             Image(
                 painter = painterResource(id = R.drawable.img_banner_default),

@@ -70,6 +70,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.localization.AppStrings
 import com.example.model.LibraryPhoto
+import com.example.model.MNotesCatalog
 import com.example.ui.theme.LocalMNotesColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -171,31 +172,66 @@ fun PhotoPickerSheet(
                     Spacer(Modifier.height(12.dp))
 
                     Text(
-                        text = AppStrings.get(lang, "orApp"),
-                        color = colors.textMuted,
-                        fontSize = 12.sp,
+                        text = "3D",
+                        color = colors.primary,
+                        fontSize = 12.5.sp,
                         fontWeight = FontWeight.ExtraBold
                     )
 
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(6.dp))
+
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(3),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.height(245.dp)
+                    ) {
+                        items(MNotesCatalog.pixel3dPhotos, key = { it.uri }) { item ->
+                            val label = if (lang == "en") item.nameEn else item.nameAr
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .border(1.5.dp, colors.borderSoft, RoundedCornerShape(12.dp))
+                                    .clickable { onSelectFromLibrary(item.uri) }
+                                    .padding(4.dp)
+                            ) {
+                                MNotesPhotoContent(
+                                    imgUri = item.uri,
+                                    useBannerDefaultIfBlank = false,
+                                    contentDescription = label,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .aspectRatio(1f)
+                                        .clip(RoundedCornerShape(9.dp))
+                                )
+                                Spacer(Modifier.height(3.dp))
+                                Text(
+                                    text = label,
+                                    color = colors.textDark,
+                                    fontSize = 9.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                    }
 
                     val enabledPhotos = libraryPhotos.filter { it.enabled }
-                    if (enabledPhotos.isEmpty()) {
+                    if (enabledPhotos.isNotEmpty()) {
+                        Spacer(Modifier.height(10.dp))
                         Text(
-                            text = AppStrings.get(lang, "noLib"),
+                            text = AppStrings.get(lang, "orApp"),
                             color = colors.textMuted,
                             fontSize = 12.sp,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 14.dp)
+                            fontWeight = FontWeight.ExtraBold
                         )
-                    } else {
+                        Spacer(Modifier.height(6.dp))
                         LazyVerticalGrid(
                             columns = GridCells.Fixed(4),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.height(140.dp)
+                            modifier = Modifier.height(100.dp)
                         ) {
                             items(enabledPhotos, key = { it.id }) { item ->
                                 Box(

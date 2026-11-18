@@ -189,7 +189,7 @@ fun SettingsSheet(
     var cutterClipName by remember { mutableStateOf("") }
     var cutterFileDurSec by remember { mutableIntStateOf(60) }
     var cutterStartSec by remember { mutableFloatStateOf(0f) }
-    var cutterDurSec by remember { mutableFloatStateOf(20f) }
+    var cutterDurSec by remember { mutableFloatStateOf(10f) }
     var isTrimming by remember { mutableStateOf(false) }
 
     val audioPicker = rememberLauncherForActivityResult(
@@ -198,7 +198,7 @@ fun SettingsSheet(
         if (uri != null) {
             cutterUri = uri
             cutterStartSec = 0f
-            cutterDurSec = 20f
+            cutterDurSec = 10f
             val fileName = runCatching {
                 context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
                     if (c.moveToFirst()) c.getString(0) else null
@@ -736,6 +736,64 @@ fun SettingsSheet(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(AppStrings.get(lang, "addLib"), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        Spacer(Modifier.height(12.dp))
+                        SectionMiniLabel("3D")
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            MNotesCatalog.pixel3dPhotos.chunked(2).forEach { rowItems ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    rowItems.forEach { item ->
+                                        val label = if (lang == "en") item.nameEn else item.nameAr
+                                        val isBanner = prefs.bannerImg == item.uri
+                                        Surface(
+                                            shape = RoundedCornerShape(16.dp),
+                                            color = if (isBanner) colors.primarySoft else colors.bgMain,
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .border(
+                                                    1.5.dp,
+                                                    if (isBanner) colors.primary else colors.borderSoft,
+                                                    RoundedCornerShape(16.dp)
+                                                )
+                                                .clickable {
+                                                    viewModel.playSound("done")
+                                                    viewModel.updatePreference(mapOf("bannerImg" to item.uri))
+                                                }
+                                        ) {
+                                            Column(
+                                                modifier = Modifier.padding(8.dp),
+                                                horizontalAlignment = Alignment.CenterHorizontally,
+                                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                MNotesPhotoContent(
+                                                    imgUri = item.uri,
+                                                    useBannerDefaultIfBlank = false,
+                                                    contentDescription = label,
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .height(120.dp)
+                                                        .clip(RoundedCornerShape(12.dp))
+                                                )
+                                                Text(
+                                                    text = label,
+                                                    color = colors.textDark,
+                                                    fontSize = 11.5.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                        }
+                                    }
+                                    if (rowItems.size == 1) {
+                                        Spacer(Modifier.weight(1f))
+                                    }
+                                }
+                            }
                         }
 
                         if (libraryPhotos.isNotEmpty()) {
@@ -1575,6 +1633,65 @@ fun SettingsSheet(
                         }
                     }
                 }
+
+                Spacer(Modifier.height(14.dp))
+                SectionMiniLabel(AppStrings.get(lang, "banIcon"))
+                ChoicePillRow(
+                    options = MNotesCatalog.bannerIcons.map {
+                        it.id to (if (lang == "en") it.nameEn else it.nameAr)
+                    },
+                    selectedId = prefs.bannerIcon,
+                    onSelect = {
+                        viewModel.playSound("nav")
+                        viewModel.updatePreference(mapOf("bannerIcon" to it))
+                    }
+                )
+
+                Spacer(Modifier.height(12.dp))
+                SectionMiniLabel(AppStrings.get(lang, "banStyle"))
+                ChoicePillRow(
+                    options = MNotesCatalog.bannerStyles.map {
+                        it.id to (if (lang == "en") it.nameEn else it.nameAr)
+                    },
+                    selectedId = prefs.bannerStyle,
+                    onSelect = {
+                        viewModel.playSound("nav")
+                        viewModel.updatePreference(mapOf("bannerStyle" to it))
+                    }
+                )
+
+                Spacer(Modifier.height(12.dp))
+                SectionMiniLabel(AppStrings.get(lang, "banShape"))
+                ChoicePillRow(
+                    options = listOf(
+                        "ring" to AppStrings.get(lang, "shRing"),
+                        "circle" to AppStrings.get(lang, "shCircle"),
+                        "ios" to AppStrings.get(lang, "shIos"),
+                        "blob" to AppStrings.get(lang, "shBlob")
+                    ),
+                    selectedId = prefs.bannerPhotoShape,
+                    onSelect = {
+                        viewModel.playSound("nav")
+                        viewModel.updatePreference(mapOf("bannerPhotoShape" to it))
+                    }
+                )
+
+                Spacer(Modifier.height(12.dp))
+                SectionMiniLabel(AppStrings.get(lang, "taskShape"))
+                ChoicePillRow(
+                    options = listOf(
+                        "ring" to AppStrings.get(lang, "shRing"),
+                        "capsule" to AppStrings.get(lang, "shCap"),
+                        "ios" to AppStrings.get(lang, "shIos"),
+                        "blob" to AppStrings.get(lang, "shBlob"),
+                        "strip" to AppStrings.get(lang, "shStrip")
+                    ),
+                    selectedId = prefs.cardShape,
+                    onSelect = {
+                        viewModel.playSound("nav")
+                        viewModel.updatePreference(mapOf("cardShape" to it))
+                    }
+                )
             }
 
             // IP Seal

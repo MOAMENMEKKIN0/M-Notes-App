@@ -35,6 +35,8 @@ class SoundEngine(private val context: Context) {
     private val scope = CoroutineScope(Dispatchers.Default)
     private var ringtoneJob: Job? = null
     private var mediaPlayer: MediaPlayer? = null
+    @Volatile
+    private var activeAudioTrack: AudioTrack? = null
 
     private enum class Wave { SINE, TRIANGLE, SAW, SQUARE }
     private data class ToneEvent(
@@ -102,7 +104,7 @@ class SoundEngine(private val context: Context) {
 
     fun playGymTrackOnce(trackId: String) {
         stopRingtone()
-        scope.launch {
+        ringtoneJob = scope.launch {
             playEvents(eventsForGymTrack(trackId))
         }
     }
@@ -131,7 +133,7 @@ class SoundEngine(private val context: Context) {
         ringtoneJob = scope.launch {
             while (isActive) {
                 playEvents(eventsForGymTrack(activeRingId))
-                delay(1800)
+                delay(350)
             }
         }
     }
@@ -175,6 +177,15 @@ class SoundEngine(private val context: Context) {
     fun stopRingtone() {
         ringtoneJob?.cancel()
         ringtoneJob = null
+        runCatching {
+            activeAudioTrack?.pause()
+            activeAudioTrack?.flush()
+            activeAudioTrack?.stop()
+        }
+        runCatching {
+            activeAudioTrack?.release()
+        }
+        activeAudioTrack = null
         runCatching {
             mediaPlayer?.stop()
         }
@@ -316,43 +327,117 @@ class SoundEngine(private val context: Context) {
         }
     }
 
+    private fun buildTenSecondPattern(
+        bpm: Double,
+        bassNotes: DoubleArray,
+        leadNotes: DoubleArray,
+        leadWave: Wave,
+        kickFreq: Double = 135.0,
+        leadVol: Double = 0.16
+    ): List<ToneEvent> {
+        val beatSec = 60.0 / bpm
+        val eighth = beatSec / 2.0
+        val events = ArrayList<ToneEvent>()
+        var t = 0.0
+        var step = 0
+        while (t < 9.85) {
+            if (step % 2 == 0) {
+                events.add(ToneEvent(kickFreq, t, 0.16, Wave.SINE, 0.34, 42.0))
+            } else {
+                events.add(ToneEvent(bassNotes[(step / 2) % bassNotes.size], t, eighth * 0.85, Wave.TRIANGLE, 0.20))
+            }
+            if (step % 4 == 2) {
+                events.add(ToneEvent(1150.0, t, 0.07, Wave.SQUARE, 0.06, 420.0))
+            }
+            val leadFreq = leadNotes[step % leadNotes.size]
+            if (leadFreq > 0.0) {
+                events.add(ToneEvent(leadFreq, t, eighth * 0.92, leadWave, leadVol))
+            }
+            t += eighth
+            step++
+        }
+        return events
+    }
+
     private fun eventsForGymTrack(id: String): List<ToneEvent> = when (id) {
-        "G1" -> listOf(0.0, 0.22, 0.44, 0.66, 0.88, 1.10).flatMapIndexed { i, d ->
-            listOf(
-                ToneEvent(130.0, d, 0.16, Wave.SINE, 0.34, 45.0),
-                ToneEvent(if (i % 2 == 1) 440.0 else 330.0, d, 0.10, Wave.SAW, 0.12)
-            )
-        }
-        "G2" -> listOf(261.6, 329.6, 392.0, 523.2, 659.2, 784.0).mapIndexed { i, f ->
-            ToneEvent(f, i * 0.11, 0.22, Wave.TRIANGLE, 0.20)
-        }
-        "G3" -> listOf(0.0, 0.28, 0.56).flatMap { d ->
-            listOf(
-                ToneEvent(980.0, d, 0.45, Wave.SINE, 0.22),
-                ToneEvent(1470.0, d, 0.40, Wave.TRIANGLE, 0.14)
-            )
-        }
-        "G4" -> listOf(220.0, 220.0, 330.0, 293.6, 220.0, 392.0).mapIndexed { i, f ->
-            ToneEvent(f, i * 0.14, 0.13, Wave.SAW, 0.14)
-        }
-        "G5" -> listOf(
-            ToneEvent(440.0, 0.0, 0.12, Wave.SINE, 0.20),
-            ToneEvent(440.0, 0.30, 0.12, Wave.SINE, 0.20),
-            ToneEvent(440.0, 0.60, 0.12, Wave.SINE, 0.20),
-            ToneEvent(880.0, 0.90, 0.45, Wave.TRIANGLE, 0.28)
+        "G1" -> buildTenSecondPattern(
+            bpm = 130.0,
+            bassNotes = doubleArrayOf(98.0, 98.0, 110.0, 130.8),
+            leadNotes = doubleArrayOf(392.0, 0.0, 440.0, 493.9, 523.3, 0.0, 493.9, 440.0),
+            leadWave = Wave.SAW,
+            kickFreq = 140.0
         )
-        "G6" -> listOf(
-            ToneEvent(523.0, 0.0, 0.14, Wave.TRIANGLE, 0.22),
-            ToneEvent(659.0, 0.14, 0.14, Wave.TRIANGLE, 0.22),
-            ToneEvent(784.0, 0.28, 0.14, Wave.TRIANGLE, 0.22),
-            ToneEvent(1046.0, 0.42, 0.45, Wave.TRIANGLE, 0.25)
+        "G2" -> buildTenSecondPattern(
+            bpm = 126.0,
+            bassNotes = doubleArrayOf(130.8, 146.8, 164.8, 196.0),
+            leadNotes = doubleArrayOf(523.3, 659.3, 784.0, 659.3, 880.0, 784.0, 659.3, 587.3),
+            leadWave = Wave.TRIANGLE,
+            kickFreq = 128.0,
+            leadVol = 0.20
         )
-        "G7" -> listOf(0.0, 0.15, 0.30, 0.45, 0.60, 0.75, 0.90).mapIndexed { i, d ->
-            ToneEvent(if (i % 2 == 1) 587.0 else 293.0, d, 0.12, Wave.SQUARE, 0.11)
-        }
-        else -> listOf(
-            ToneEvent(587.3, 0.0, 0.40, Wave.SINE, 0.20),
-            ToneEvent(880.0, 0.14, 0.45, Wave.SINE, 0.20)
+        "G3" -> buildTenSecondPattern(
+            bpm = 136.0,
+            bassNotes = doubleArrayOf(110.0, 110.0, 146.8, 130.8),
+            leadNotes = doubleArrayOf(980.0, 0.0, 659.3, 0.0, 980.0, 784.0, 659.3, 523.3),
+            leadWave = Wave.SINE,
+            kickFreq = 150.0,
+            leadVol = 0.22
+        )
+        "G4" -> buildTenSecondPattern(
+            bpm = 124.0,
+            bassNotes = doubleArrayOf(82.4, 98.0, 110.0, 98.0),
+            leadNotes = doubleArrayOf(329.6, 329.6, 440.0, 392.0, 329.6, 493.9, 440.0, 392.0),
+            leadWave = Wave.SAW,
+            kickFreq = 132.0,
+            leadVol = 0.15
+        )
+        "G5" -> buildTenSecondPattern(
+            bpm = 132.0,
+            bassNotes = doubleArrayOf(110.0, 123.5, 130.8, 146.8),
+            leadNotes = doubleArrayOf(440.0, 0.0, 440.0, 0.0, 587.3, 659.3, 880.0, 784.0),
+            leadWave = Wave.TRIANGLE,
+            kickFreq = 145.0,
+            leadVol = 0.21
+        )
+        "G6" -> buildTenSecondPattern(
+            bpm = 128.0,
+            bassNotes = doubleArrayOf(130.8, 164.8, 196.0, 164.8),
+            leadNotes = doubleArrayOf(523.3, 659.3, 784.0, 1046.5, 784.0, 659.3, 587.3, 523.3),
+            leadWave = Wave.TRIANGLE,
+            kickFreq = 130.0,
+            leadVol = 0.21
+        )
+        "G7" -> buildTenSecondPattern(
+            bpm = 140.0,
+            bassNotes = doubleArrayOf(116.5, 130.8, 146.8, 130.8),
+            leadNotes = doubleArrayOf(587.3, 440.0, 587.3, 698.5, 587.3, 523.3, 440.0, 523.3),
+            leadWave = Wave.SQUARE,
+            kickFreq = 148.0,
+            leadVol = 0.12
+        )
+        "G8" -> buildTenSecondPattern(
+            bpm = 122.0,
+            bassNotes = doubleArrayOf(146.8, 164.8, 196.0, 220.0),
+            leadNotes = doubleArrayOf(587.3, 740.0, 880.0, 740.0, 659.3, 587.3, 659.3, 880.0),
+            leadWave = Wave.SINE,
+            kickFreq = 125.0,
+            leadVol = 0.22
+        )
+        "G9" -> buildTenSecondPattern(
+            bpm = 134.0,
+            bassNotes = doubleArrayOf(73.4, 73.4, 87.3, 98.0),
+            leadNotes = doubleArrayOf(293.7, 349.2, 440.0, 392.0, 293.7, 440.0, 523.3, 440.0),
+            leadWave = Wave.SAW,
+            kickFreq = 155.0,
+            leadVol = 0.15
+        )
+        else -> buildTenSecondPattern(
+            bpm = 138.0,
+            bassNotes = doubleArrayOf(130.8, 146.8, 164.8, 196.0),
+            leadNotes = doubleArrayOf(659.3, 784.0, 880.0, 1046.5, 880.0, 784.0, 659.3, 784.0),
+            leadWave = Wave.TRIANGLE,
+            kickFreq = 142.0,
+            leadVol = 0.20
         )
     }
 
@@ -413,11 +498,20 @@ class SoundEngine(private val context: Context) {
                 .setTransferMode(AudioTrack.MODE_STATIC)
                 .build()
 
+            activeAudioTrack = track
             track.write(pcm, 0, pcm.size)
             track.play()
-            Thread.sleep((maxSec * 1000).toLong() + 40L)
-            track.stop()
-            track.release()
+            var elapsed = 0L
+            val targetMs = (maxSec * 1000).toLong() + 40L
+            while (elapsed < targetMs && activeAudioTrack === track) {
+                Thread.sleep(60L)
+                elapsed += 60L
+            }
+            if (activeAudioTrack === track) {
+                activeAudioTrack = null
+            }
+            runCatching { track.stop() }
+            runCatching { track.release() }
         }
     }
 }

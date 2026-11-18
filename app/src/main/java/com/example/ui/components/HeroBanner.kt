@@ -20,8 +20,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccessTime
 import androidx.compose.material.icons.rounded.EmojiEvents
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.FitnessCenter
+import androidx.compose.material.icons.rounded.LocalFireDepartment
 import androidx.compose.material.icons.rounded.MyLocation
 import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material.icons.rounded.Verified
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -46,6 +50,10 @@ fun bannerIconVector(iconId: String): ImageVector? = when (iconId) {
     "award" -> Icons.Rounded.EmojiEvents
     "star" -> Icons.Rounded.Star
     "target" -> Icons.Rounded.MyLocation
+    "gym" -> Icons.Rounded.FitnessCenter
+    "flame" -> Icons.Rounded.LocalFireDepartment
+    "heart" -> Icons.Rounded.Favorite
+    "check" -> Icons.Rounded.Verified
     else -> null
 }
 

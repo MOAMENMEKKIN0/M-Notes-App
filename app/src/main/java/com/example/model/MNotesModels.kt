@@ -220,8 +220,20 @@ data class StyleOption(
     val nameEn: String
 )
 
+data class BuiltInPhotoSpec(
+    val uri: String,
+    val nameAr: String,
+    val nameEn: String
+)
+
 object MNotesCatalog {
     val themes = listOf(
+        AppThemeSpec(
+            id = "caramel-sand", nameAr = "كراميل رملي وزجاج دافئ", nameEn = "Caramel Sand",
+            bgMain = Color(0xFFFAF5EE), bgTopGlow = Color(0xFFDEC1A4), cardBg = Color(0xFFFFFDF9),
+            borderSoft = Color(0xFFEADBC8), textDark = Color(0xFF291408), textMuted = Color(0xFF7A563C),
+            primary = Color(0xFF9A5B25), primarySoft = Color(0xFFFAF0E6), accent = Color(0xFFD97706)
+        ),
         AppThemeSpec(
             id = "mint-clean", nameAr = "نعناعي صافي", nameEn = "Mint Clean",
             bgMain = Color(0xFFF7FAFC), bgTopGlow = Color(0xFFE2F6EF), cardBg = Color(0xFFFFFFFF),
@@ -300,7 +312,11 @@ object MNotesCatalog {
         StyleOption("clock", "ساعة", "Clock"),
         StyleOption("award", "وسام", "Award"),
         StyleOption("star", "نجمة", "Star"),
-        StyleOption("target", "هدف", "Target")
+        StyleOption("target", "هدف", "Target"),
+        StyleOption("gym", "دمبل الجيم", "Gym Dumbbell"),
+        StyleOption("flame", "شعلة النشاط", "Streak Flame"),
+        StyleOption("heart", "صحة وعافية", "Wellness"),
+        StyleOption("check", "وسام الإنجاز", "Check Badge")
     )
 
     val fontOptions = listOf(
@@ -311,13 +327,40 @@ object MNotesCatalog {
     )
 
     val gymTracks = listOf(
-        GymTrack("G1", "نبض الجيم السريع (Bass Beat)", "Gym Bass Beat (128 BPM)"),
-        GymTrack("G2", "طاقة الأبطال (تصاعد حماسي)", "Champion Synth Rise"),
-        GymTrack("G3", "جرس حلبة الملاكمة (انطلاق)", "Boxing Round Bell"),
-        GymTrack("G4", "روك الطاقة الإلكتروني", "Electric Energy Riff"),
-        GymTrack("G5", "عد تنازلي ثم انطلاق!", "Countdown & Go!"),
-        GymTrack("G6", "موسيقى الفوز والإنجاز", "Victory Fanfare"),
-        GymTrack("G7", "تكنو الجري والتمرين", "Cardio Techno Pulse"),
-        GymTrack("G8", "رنة كرستال رايقة", "Crystal Focus Chime")
+        GymTrack("G1", "نبض الجيم القوي (١٠ ث)", "Gym Power Beat (10s)"),
+        GymTrack("G2", "طاقة الأبطال الحماسية (١٠ ث)", "Champion Anthem (10s)"),
+        GymTrack("G3", "جرس حلبة الملاكمة وانطلاق (١٠ ث)", "Boxing Ring Rush (10s)"),
+        GymTrack("G4", "إيقاع الحديد والتركيز (١٠ ث)", "Iron Focus Groove (10s)"),
+        GymTrack("G5", "عد تنازلي ثم هجوم! (١٠ ث)", "Countdown Attack (10s)"),
+        GymTrack("G6", "نشيد الفوز والتحدي (١٠ ث)", "Victory Challenge (10s)"),
+        GymTrack("G7", "تكنو الجري والكارديو (١٠ ث)", "Cardio Techno Beat (10s)"),
+        GymTrack("G8", "انطلاقة الصباح النشطة (١٠ ث)", "Morning Warmup Rush (10s)"),
+        GymTrack("G9", "ضخ الأوزان الثقيلة (١٠ ث)", "Heavy Lift Drop (10s)"),
+        GymTrack("G10", "أدرينالين الجولة الأخيرة (١٠ ث)", "Final Set Adrenaline (10s)")
+    )
+
+    val pixel3dPhotos = listOf(
+        BuiltInPhotoSpec("res://img_3d_elder_beige", "رجل كبير - بيج", "Elder - Beige"),
+        BuiltInPhotoSpec("res://img_3d_elder_man", "رجل كبير - فاتح", "Elder - Light"),
+        BuiltInPhotoSpec("res://img_3d_bald_brown", "شاب أقرع - بني", "Bald - Brown"),
+        BuiltInPhotoSpec("res://img_3d_bald_man", "شاب أقرع - فاتح", "Bald - Light"),
+        BuiltInPhotoSpec("res://img_3d_haired_mint", "شاب بشعر - نعناعي", "Man - Mint"),
+        BuiltInPhotoSpec("res://img_3d_haired_man", "شاب بشعر - فاتح", "Man - Light"),
+        BuiltInPhotoSpec("res://img_3d_child_cream", "طفلة - كريمي", "Child - Cream"),
+        BuiltInPhotoSpec("res://img_3d_child", "طفل - فاتح", "Child - Light"),
+        BuiltInPhotoSpec("res://img_3d_woman_beige", "امرأة - بيج", "Woman - Beige"),
+        BuiltInPhotoSpec("res://img_3d_woman", "امرأة - فاتح", "Woman - Light"),
+        BuiltInPhotoSpec("res://img_3d_medieval_bald", "القرون الوسطى - أصلع", "Medieval Bald"),
+        BuiltInPhotoSpec("res://img_3d_jahiliyyah", "أيام الجاهلية - صحراء", "Ancient Arabian"),
+        BuiltInPhotoSpec("res://img_3d_ancient_fruits", "فواكه زمان في أواني", "Heritage Fruits"),
+        BuiltInPhotoSpec("res://img_3d_ancient_bread_grain", "خبز زمان وقمح وشعير", "Bread & Grains"),
+        BuiltInPhotoSpec("res://img_3d_gym_chest", "جيم - صدر (بيج)", "Gym - Chest"),
+        BuiltInPhotoSpec("res://img_3d_gym_back", "جيم - ظهر (بني)", "Gym - Back"),
+        BuiltInPhotoSpec("res://img_3d_gym_legs", "جيم - رجل (سماوي)", "Gym - Legs"),
+        BuiltInPhotoSpec("res://img_3d_gym_legpress", "جيم - جهاز الرجل", "Gym - Leg Press"),
+        BuiltInPhotoSpec("res://img_3d_gym_lunges", "جيم - رجل بالدمبل", "Gym - Lunges"),
+        BuiltInPhotoSpec("res://img_3d_gym_arms", "جيم - ذراع وبار", "Gym - Arms"),
+        BuiltInPhotoSpec("res://img_3d_gym_shoulders", "جيم - أكتاف (بيج)", "Gym - Shoulders"),
+        BuiltInPhotoSpec("res://img_3d_gym_workout", "جيم - دمبل (فاتح)", "Gym - Dumbbells")
     )
 }

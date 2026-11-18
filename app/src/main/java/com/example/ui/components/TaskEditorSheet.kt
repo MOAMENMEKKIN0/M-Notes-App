@@ -61,6 +61,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.localization.AppStrings
 import com.example.model.LibraryPhoto
+import com.example.model.MNotesCatalog
 import com.example.model.RepeatMode
 import com.example.model.SmartTask
 import com.example.ui.theme.LocalMNotesColors
@@ -491,19 +492,60 @@ fun TaskEditorSheet(
                         }
                     }
 
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        text = "3D",
+                        color = colors.primary,
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        MNotesCatalog.pixel3dPhotos.chunked(4).forEach { rowItems ->
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                rowItems.forEach { item ->
+                                    val selected = draftImgUri == item.uri
+                                    val label = if (lang == "en") item.nameEn else item.nameAr
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .aspectRatio(1f)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(if (selected) colors.primarySoft else colors.bgMain)
+                                            .border(
+                                                1.5.dp,
+                                                if (selected) colors.primary else colors.borderSoft,
+                                                RoundedCornerShape(12.dp)
+                                            )
+                                            .clickable { onSelectDraftImg(item.uri) }
+                                            .padding(2.dp)
+                                    ) {
+                                        MNotesPhotoContent(
+                                            imgUri = item.uri,
+                                            useBannerDefaultIfBlank = false,
+                                            contentDescription = label,
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .clip(RoundedCornerShape(9.dp))
+                                        )
+                                    }
+                                }
+                                repeat(4 - rowItems.size) {
+                                    Spacer(Modifier.weight(1f))
+                                }
+                            }
+                        }
+                    }
+
                     val enabledLibrary = libraryPhotos.filter { it.enabled }
-                    Spacer(Modifier.height(8.dp))
-                    if (enabledLibrary.isEmpty()) {
-                        Text(
-                            text = AppStrings.get(lang, "noLib"),
-                            color = colors.textMuted,
-                            fontSize = 11.5.sp,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 6.dp)
-                        )
-                    } else {
+                    if (enabledLibrary.isNotEmpty()) {
+                        Spacer(Modifier.height(8.dp))
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             modifier = Modifier.fillMaxWidth()
