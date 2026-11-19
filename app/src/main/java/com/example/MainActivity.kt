@@ -22,6 +22,7 @@ import com.example.audio.SoundEngine
 import com.example.data.LocalMediaRepository
 import com.example.data.LocalStoreRepository
 import com.example.data.MNotesRepository
+import com.example.notification.TaskAlarmScheduler
 import com.example.ui.MNotesViewModel
 import com.example.ui.MainScreen
 import com.example.ui.auth.completeEmailVerificationSignInLink
@@ -29,22 +30,41 @@ import com.example.ui.theme.MNotesTheme
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
 import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlin.math.abs
 
 class MainActivity : ComponentActivity() {
+    private val _pendingAlertTaskId = MutableStateFlow<String?>(null)
+    val pendingAlertTaskId: StateFlow<String?> = _pendingAlertTaskId.asStateFlow()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        TaskAlarmScheduler.ensureNotificationChannel(applicationContext)
+        handleIncomingIntentExtras(intent)
         handleIncomingEmailLink(intent)
         setContent {
-            MNotesAppRoot()
+            MNotesAppRoot(
+                pendingAlertTaskIdFlow = pendingAlertTaskId,
+                onConsumePendingAlert = { _pendingAlertTaskId.value = null }
+            )
         }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        handleIncomingIntentExtras(intent)
         handleIncomingEmailLink(intent)
+    }
+
+    private fun handleIncomingIntentExtras(intent: Intent?) {
+        val alertTaskId = intent?.getStringExtra(TaskAlarmScheduler.EXTRA_ALERT_TASK_ID)
+        if (!alertTaskId.isNullOrBlank()) {
+            _pendingAlertTaskId.value = alertTaskId
+        }
     }
 
     private fun handleIncomingEmailLink(intent: Intent?) {
@@ -94,7 +114,10 @@ private fun applyPreferredRefreshRate(activity: Activity?, targetHz: Int) {
 }
 
 @Composable
-private fun MNotesAppRoot() {
+private fun MNotesAppRoot(
+    pendingAlertTaskIdFlow: StateFlow<String?>,
+    onConsumePendingAlert: () -> Unit
+) {
     val context = LocalContext.current
     val activity = remember(context) { context as? Activity }
     val appContext = remember(context) { context.applicationContext }
@@ -106,7 +129,7 @@ private fun MNotesAppRoot() {
     val mediaRepo = remember(appContext) { LocalMediaRepository(appContext) }
     val soundEngine = remember(appContext) { SoundEngine(appContext) }
 
-    val factory = remember(localStore, cloudRepo, mediaRepo, soundEngine) {
+    val factory = remember(localStore, cloudRepo, mediaRepo, soundEngine, appContext) {
         object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -114,13 +137,23 @@ private fun MNotesAppRoot() {
                     localStore = localStore,
                     repository = cloudRepo,
                     mediaRepository = mediaRepo,
-                    soundEngine = soundEngine
+                    soundEngine = soundEngine,
+                    appContext = appContext
                 ) as T
             }
         }
     }
     val vm: MNotesViewModel = viewModel(factory = factory)
     val prefs by vm.preferences.collectAsStateWithLifecycle()
+    val pendingAlertTaskId by pendingAlertTaskIdFlow.collectAsStateWithLifecycle()
+
+    LaunchedEffect(pendingAlertTaskId) {
+        val id = pendingAlertTaskId
+        if (!id.isNullOrBlank()) {
+            vm.openTaskAlertById(id)
+            onConsumePendingAlert()
+        }
+    }
 
     LaunchedEffect(prefs.refreshRateHz) {
         applyPreferredRefreshRate(activity, prefs.refreshRateHz)

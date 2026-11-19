@@ -12,11 +12,13 @@ import com.example.model.BackupTaskDto
 import com.example.model.FloatingBadgeItem
 import com.example.model.QuickRequest
 import com.example.model.RepeatMode
+import com.example.model.ScreenDesignStoreState
 import com.example.model.SmartIconSettings
 import com.example.model.SmartTask
 import com.example.model.UserPreferences
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -79,7 +81,8 @@ private data class LocalWorkspaceState(
     val requests: List<LocalRequestDto> = emptyList(),
     val floatingBadgesInitialized: Boolean = false,
     val floatingBadges: List<FloatingBadgeItem> = emptyList(),
-    val smartIconSettings: SmartIconSettings = SmartIconSettings()
+    val smartIconSettings: SmartIconSettings = SmartIconSettings(),
+    val screenDesignState: ScreenDesignStoreState = ScreenDesignStoreState()
 )
 
 class LocalStoreRepository(private val context: Context) {
@@ -162,7 +165,10 @@ class LocalStoreRepository(private val context: Context) {
             reqShowAmount = p.reqShowAmount,
             reqShowDate = p.reqShowDate,
             reqShowHeaderBadge = p.reqShowHeaderBadge,
-            reqDefaultStampId = p.reqDefaultStampId
+            reqDefaultStampId = p.reqDefaultStampId,
+            reminderBgThemeId = p.reminderBgThemeId,
+            reminderDoodlePackId = p.reminderDoodlePackId,
+            reminderDoodleOpacity = p.reminderDoodleOpacity
         )
     }
 
@@ -228,6 +234,14 @@ class LocalStoreRepository(private val context: Context) {
     val smartIconSettingsFlow: Flow<SmartIconSettings> = stateFlow.map { state ->
         state.smartIconSettings
     }
+
+    val screenDesignStateFlow: Flow<ScreenDesignStoreState> = stateFlow.map { state ->
+        state.screenDesignState
+    }
+
+    suspend fun getTasksSnapshot(): List<SmartTask> = tasksFlow.first()
+
+    suspend fun getPreferencesSnapshot(): UserPreferences = preferencesFlow.first()
 
     suspend fun ensureInitialized(): Result<Unit> = runWorkspaceEdit { state ->
         val defaultBadge = FloatingBadgeItem(
@@ -391,6 +405,11 @@ class LocalStoreRepository(private val context: Context) {
                 "reqShowDate" -> (v as? Boolean)?.let { p = p.copy(reqShowDate = it) }
                 "reqShowHeaderBadge" -> (v as? Boolean)?.let { p = p.copy(reqShowHeaderBadge = it) }
                 "reqDefaultStampId" -> (v as? String)?.let { p = p.copy(reqDefaultStampId = it.take(30)) }
+                "reminderBgThemeId" -> (v as? String)?.let { p = p.copy(reminderBgThemeId = it.take(40)) }
+                "reminderDoodlePackId" -> (v as? String)?.let { p = p.copy(reminderDoodlePackId = it.take(40)) }
+                "reminderDoodleOpacity" -> (v as? Number)?.toInt()?.let {
+                    p = p.copy(reminderDoodleOpacity = it.coerceIn(6, 30))
+                }
             }
         }
         state.copy(
@@ -462,7 +481,7 @@ class LocalStoreRepository(private val context: Context) {
                 )
             } else existing
         }
-        state.copy(tasks = updated)
+        state.copy(initialized = true, tasks = updated)
     }
 
     suspend fun updateTaskBadge(
@@ -540,7 +559,7 @@ class LocalStoreRepository(private val context: Context) {
         val updated = state.tasks.map { existing ->
             if (existing.id == taskId) existing.copy(imgUri = imgUri.take(2000)) else existing
         }
-        state.copy(tasks = updated)
+        state.copy(initialized = true, tasks = updated)
     }
 
     suspend fun markTaskAlerted(taskId: String, dateStr: String): Result<Unit> = runWorkspaceEdit { state ->
@@ -717,6 +736,10 @@ class LocalStoreRepository(private val context: Context) {
         )
     }
 
+    suspend fun saveScreenDesignState(designState: ScreenDesignStoreState): Result<Unit> = runWorkspaceEdit { state ->
+        state.copy(screenDesignState = designState)
+    }
+
     suspend fun restoreFromSnapshot(snapshot: BackupSnapshotPayload): Result<Unit> = runWorkspaceEdit { state ->
         val p = snapshot.preferences
         val normalizedPrefs = p.copy(
@@ -734,7 +757,10 @@ class LocalStoreRepository(private val context: Context) {
             taskImgDp = p.taskImgDp.coerceIn(28, 150),
             alertImgDp = p.alertImgDp.coerceIn(44, 220),
             textScalePercent = p.textScalePercent.coerceIn(75, 185),
-            cardScalePercent = p.cardScalePercent.coerceIn(80, 160)
+            cardScalePercent = p.cardScalePercent.coerceIn(80, 160),
+            reminderBgThemeId = p.reminderBgThemeId.ifBlank { "default" }.take(40),
+            reminderDoodlePackId = p.reminderDoodlePackId.ifBlank { "none" }.take(40),
+            reminderDoodleOpacity = p.reminderDoodleOpacity.coerceIn(6, 30)
         )
         val restoredTasks = snapshot.tasks.mapIndexed { idx, t: BackupTaskDto ->
             LocalTaskDto(
@@ -798,7 +824,8 @@ class LocalStoreRepository(private val context: Context) {
             } else {
                 state.floatingBadges
             },
-            smartIconSettings = snapshot.smartIconSettings
+            smartIconSettings = snapshot.smartIconSettings,
+            screenDesignState = snapshot.screenDesignState
         )
     }
 

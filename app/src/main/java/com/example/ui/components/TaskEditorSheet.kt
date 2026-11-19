@@ -65,16 +65,22 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import kotlinx.coroutines.launch
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -131,6 +137,10 @@ fun TaskEditorSheet(
     val density = LocalDensity.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val safeDismisser = rememberSafeSheetDismisser(sheetState, onDismiss)
+    val scrollState = rememberScrollState()
+    val scope = rememberCoroutineScope()
+    var photoLibraryOffsetY by remember { mutableIntStateOf(0) }
+    val latestDraftImgUri by rememberUpdatedState(draftImgUri)
 
     var title by remember(editingTask?.id) { mutableStateOf(editingTask?.title ?: "") }
     var meta by remember(editingTask?.id) { mutableStateOf(editingTask?.meta ?: "") }
@@ -182,7 +192,7 @@ fun TaskEditorSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
                 .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
             Row(
@@ -215,6 +225,74 @@ fun TaskEditorSheet(
                     .border(1.dp, colors.borderSoft, RoundedCornerShape(20.dp))
             ) {
                 Column(modifier = Modifier.padding(14.dp)) {
+                    // Live tappable Task Photo Preview (instant feedback + quick jump to photo library)
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = colors.bgMain,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.2.dp, colors.primary.copy(alpha = 0.35f), RoundedCornerShape(16.dp))
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable {
+                                scope.launch {
+                                    scrollState.animateScrollTo(photoLibraryOffsetY.coerceAtLeast(0))
+                                }
+                            }
+                            .testTag("task_editor_photo_preview_card")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            MediaAvatarSlot(
+                                imgUri = draftImgUri,
+                                size = 60.dp,
+                                shapeId = "ring",
+                                useBannerDefaultIfBlank = false,
+                                contentDescription = if (lang == "en") "Current task image" else "صورة المهمة الحالية",
+                                onClick = {
+                                    scope.launch {
+                                        scrollState.animateScrollTo(photoLibraryOffsetY.coerceAtLeast(0))
+                                    }
+                                }
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = if (lang == "en") "Task Circle Image" else "صورة دائرة المهمة",
+                                    color = colors.textDark,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.ExtraBold
+                                )
+                                Text(
+                                    text = if (lang == "en") {
+                                        "Tap to pick a new gym, cardio, or custom photo"
+                                    } else {
+                                        "اضغط لاختيار صورة تمرين أو جيم أو صورة من جهازك"
+                                    },
+                                    color = colors.textMuted,
+                                    fontSize = 11.sp
+                                )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(999.dp))
+                                    .background(colors.primarySoft)
+                                    .border(1.dp, colors.primary.copy(alpha = 0.45f), RoundedCornerShape(999.dp))
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = if (lang == "en") "Change" else "تغيير",
+                                    color = colors.primary,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.ExtraBold
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(12.dp))
+
                     FieldLabel(AppStrings.get(lang, "taskName"))
                     OutlinedTextField(
                         value = title,
@@ -723,54 +801,66 @@ fun TaskEditorSheet(
 
                     Spacer(Modifier.height(10.dp))
 
-                    Box(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(colors.primarySoft)
-                            .border(1.5.dp, colors.primary, RoundedCornerShape(14.dp))
-                            .clickable {
-                                photoLauncher.launch(
-                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                            .onGloballyPositioned { coords ->
+                                photoLibraryOffsetY = coords.positionInParent().y.roundToInt()
+                            }
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(colors.primarySoft)
+                                .border(1.5.dp, colors.primary, RoundedCornerShape(14.dp))
+                                .clickable {
+                                    photoLauncher.launch(
+                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                    )
+                                }
+                                .padding(vertical = 11.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Rounded.AddPhotoAlternate,
+                                    contentDescription = null,
+                                    tint = colors.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text = if (draftImgUri.isNotBlank()) AppStrings.get(lang, "photoSelected")
+                                    else "+ ${AppStrings.get(lang, "pickPhoto")}",
+                                    color = colors.primary,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
                                 )
                             }
-                            .padding(vertical = 11.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Rounded.AddPhotoAlternate,
-                                contentDescription = null,
-                                tint = colors.primary,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                text = if (draftImgUri.isNotBlank()) AppStrings.get(lang, "photoSelected")
-                                else "+ ${AppStrings.get(lang, "pickPhoto")}",
-                                color = colors.primary,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
                         }
-                    }
 
-                    Spacer(Modifier.height(10.dp))
-                    Text(
-                        text = if (lang == "en") "Categorized Photo Folders" else "مجلدات الصور (فواكه • خضروات • جيم • شخصيات)",
-                        color = colors.primary,
-                        fontSize = 11.5.sp,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    CategorizedBuiltInPhotosBrowser(
-                        lang = lang,
-                        selectedUri = draftImgUri,
-                        columns = 3,
-                        defaultCategory = "gym",
-                        showLabels = true,
-                        onSelectUri = onSelectDraftImg
-                    )
+                        Spacer(Modifier.height(10.dp))
+                        Text(
+                            text = if (lang == "en") {
+                                "Exercise & Photo Library (Chest • Back • Legs • Cardio • Abs • Arms)"
+                            } else {
+                                "مكتبة صور التمارين والمجلدات (صدر • ظهر • رجل • كارديو • بطن • أكتاف)"
+                            },
+                            color = colors.primary,
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        CategorizedBuiltInPhotosBrowser(
+                            lang = lang,
+                            selectedUri = draftImgUri,
+                            columns = 3,
+                            defaultCategory = "chest",
+                            showLabels = true,
+                            onSelectUri = onSelectDraftImg
+                        )
+                    }
 
                     val enabledLibrary = libraryPhotos.filter { it.enabled }
                     if (enabledLibrary.isNotEmpty()) {
@@ -1177,26 +1267,25 @@ fun TaskEditorSheet(
 
                     Button(
                         onClick = {
-                            safeDismisser.dismissWith {
-                                onSave(
-                                    title,
-                                    meta,
-                                    startDate,
-                                    alertTime,
-                                    repeatMode,
-                                    cycleStepsRaw,
-                                    selectedDays,
-                                    alertEnabled,
-                                    draftImgUri,
-                                    selectedRingId,
-                                    false,
-                                    badgeIconId,
-                                    badgeVisible,
-                                    badgeSizeDp,
-                                    badgeCategory,
-                                    badgeSmartMode
-                                )
-                            }
+                            onSave(
+                                title,
+                                meta,
+                                startDate,
+                                alertTime,
+                                repeatMode,
+                                cycleStepsRaw,
+                                selectedDays,
+                                alertEnabled,
+                                latestDraftImgUri,
+                                selectedRingId,
+                                false,
+                                badgeIconId,
+                                badgeVisible,
+                                badgeSizeDp,
+                                badgeCategory,
+                                badgeSmartMode
+                            )
+                            safeDismisser.dismiss()
                         },
                         enabled = title.trim().isNotEmpty(),
                         shape = RoundedCornerShape(14.dp),
@@ -1217,26 +1306,25 @@ fun TaskEditorSheet(
                         Spacer(Modifier.height(8.dp))
                         OutlinedButton(
                             onClick = {
-                                safeDismisser.dismissWith {
-                                    onSave(
-                                        title,
-                                        meta,
-                                        startDate,
-                                        alertTime,
-                                        repeatMode,
-                                        cycleStepsRaw,
-                                        selectedDays,
-                                        alertEnabled,
-                                        draftImgUri,
-                                        selectedRingId,
-                                        true,
-                                        badgeIconId,
-                                        badgeVisible,
-                                        badgeSizeDp,
-                                        badgeCategory,
-                                        badgeSmartMode
-                                    )
-                                }
+                                onSave(
+                                    title,
+                                    meta,
+                                    startDate,
+                                    alertTime,
+                                    repeatMode,
+                                    cycleStepsRaw,
+                                    selectedDays,
+                                    alertEnabled,
+                                    latestDraftImgUri,
+                                    selectedRingId,
+                                    true,
+                                    badgeIconId,
+                                    badgeVisible,
+                                    badgeSizeDp,
+                                    badgeCategory,
+                                    badgeSmartMode
+                                )
+                                safeDismisser.dismiss()
                             },
                             enabled = title.trim().isNotEmpty(),
                             shape = RoundedCornerShape(14.dp),

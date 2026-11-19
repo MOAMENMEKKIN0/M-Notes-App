@@ -80,6 +80,7 @@ fun PhotoPickerSheet(
     title: String,
     lang: String,
     libraryPhotos: List<LibraryPhoto>,
+    currentImgUri: String = "",
     onPickFromDevice: (Uri) -> Unit,
     onSelectFromLibrary: (String) -> Unit,
     onDismiss: () -> Unit
@@ -174,7 +175,11 @@ fun PhotoPickerSheet(
                     Spacer(Modifier.height(12.dp))
 
                     Text(
-                        text = if (lang == "en") "Photo Folders" else "مجلدات صور البرنامج",
+                        text = if (lang == "en") {
+                            "Exercise & Photo Library"
+                        } else {
+                            "مكتبة صور التمارين والمجلدات"
+                        },
                         color = colors.primary,
                         fontSize = 12.5.sp,
                         fontWeight = FontWeight.ExtraBold
@@ -184,11 +189,14 @@ fun PhotoPickerSheet(
 
                     CategorizedBuiltInPhotosBrowser(
                         lang = lang,
-                        selectedUri = "",
+                        selectedUri = currentImgUri,
                         columns = 3,
-                        defaultCategory = "gym",
+                        defaultCategory = "chest",
                         showLabels = true,
-                        onSelectUri = { uri -> safeDismisser.dismissWith { onSelectFromLibrary(uri) } }
+                        onSelectUri = { uri ->
+                            onSelectFromLibrary(uri)
+                            safeDismisser.dismiss()
+                        }
                     )
 
                     val enabledPhotos = libraryPhotos.filter { it.enabled }
@@ -208,13 +216,21 @@ fun PhotoPickerSheet(
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
                                     rowItems.forEach { item ->
+                                        val isCur = currentImgUri == item.filePath
                                         Box(
                                             modifier = Modifier
                                                 .weight(1f)
                                                 .aspectRatio(1f)
                                                 .clip(CircleShape)
-                                                .border(1.5.dp, colors.borderSoft, CircleShape)
-                                                .clickable { safeDismisser.dismissWith { onSelectFromLibrary(item.filePath) } }
+                                                .border(
+                                                    if (isCur) 2.5.dp else 1.5.dp,
+                                                    if (isCur) colors.primary else colors.borderSoft,
+                                                    CircleShape
+                                                )
+                                                .clickable {
+                                                    onSelectFromLibrary(item.filePath)
+                                                    safeDismisser.dismiss()
+                                                }
                                                 .padding(2.dp)
                                         ) {
                                             MNotesPhotoContent(

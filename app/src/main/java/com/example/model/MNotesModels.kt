@@ -70,6 +70,11 @@ data class SmartTask(
         return cycleSteps[idx]
     }
 
+    fun displayTitle(): String {
+        val step = currentCycleStepOnly()
+        return if (step.isNotBlank()) "$title • $step" else title
+    }
+
     fun isActiveOnDate(date: LocalDate = LocalDate.now()): Boolean {
         val dateStr = date.format(DateTimeFormatter.ISO_LOCAL_DATE)
         val jsDay = (date.dayOfWeek.value % 7).toLong()
@@ -188,6 +193,9 @@ data class UserPreferences(
     val reqShowDate: Boolean = true,
     val reqShowHeaderBadge: Boolean = true,
     val reqDefaultStampId: String = "paid_thanks",
+    val reminderBgThemeId: String = "default",
+    val reminderDoodlePackId: String = "none",
+    val reminderDoodleOpacity: Int = 14,
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
 )
@@ -358,7 +366,10 @@ data class BackupPreferencesDto(
     val reqShowAmount: Boolean = true,
     val reqShowDate: Boolean = true,
     val reqShowHeaderBadge: Boolean = true,
-    val reqDefaultStampId: String = "paid_thanks"
+    val reqDefaultStampId: String = "paid_thanks",
+    val reminderBgThemeId: String = "default",
+    val reminderDoodlePackId: String = "none",
+    val reminderDoodleOpacity: Int = 14
 )
 
 @Serializable
@@ -369,7 +380,8 @@ data class BackupSnapshotPayload(
     val tasks: List<BackupTaskDto> = emptyList(),
     val requests: List<BackupRequestDto> = emptyList(),
     val floatingBadges: List<FloatingBadgeItem> = emptyList(),
-    val smartIconSettings: SmartIconSettings = SmartIconSettings()
+    val smartIconSettings: SmartIconSettings = SmartIconSettings(),
+    val screenDesignState: ScreenDesignStoreState = ScreenDesignStoreState()
 )
 
 data class AppThemeSpec(
@@ -409,8 +421,12 @@ data class BuiltInPhotoSpec(
     val uri: String,
     val nameAr: String,
     val nameEn: String,
-    val category: String = "heritage"
-)
+    val category: String = "heritage",
+    val extraCategories: Set<String> = emptySet()
+) {
+    fun matchesCategory(categoryId: String): Boolean =
+        categoryId == "all" || category == categoryId || extraCategories.contains(categoryId)
+}
 
 data class LauncherIconSpec(
     val id: String,
@@ -551,60 +567,121 @@ object MNotesCatalog {
 
     val photoCategories = listOf(
         PhotoCategorySpec("all", "كل الصور", "All Photos"),
-        PhotoCategorySpec("gym", "أدوات وصور الجيم", "Gym & Gear"),
-        PhotoCategorySpec("cardio", "كارديو ولياقة", "Cardio & Fitness"),
-        PhotoCategorySpec("fruits", "فواكه القرون الوسطى", "Medieval Fruits"),
-        PhotoCategorySpec("vegetables", "خضروات القرون الوسطى", "Medieval Veggies"),
-        PhotoCategorySpec("heritage", "شخصيات وعصور زمان", "Characters & Era")
+        PhotoCategorySpec("chest", "تمارين الصدر", "Chest"),
+        PhotoCategorySpec("back", "تمارين الظهر", "Back"),
+        PhotoCategorySpec("legs", "تمارين الرجل", "Legs"),
+        PhotoCategorySpec("cardio", "كارديو ولياقة", "Cardio"),
+        PhotoCategorySpec("abs", "البطن والكور", "Abs & Core"),
+        PhotoCategorySpec("shoulders_arms", "الأكتاف والذراع", "Shoulders & Arms"),
+        PhotoCategorySpec("recovery", "إحماء وإطالة", "Warm-Up & Recovery"),
+        PhotoCategorySpec("gym", "أدوات الجيم", "Gym & Gear"),
+        PhotoCategorySpec("fruits", "فواكه زمان", "Fruits"),
+        PhotoCategorySpec("vegetables", "خضروات زمان", "Vegetables"),
+        PhotoCategorySpec("heritage", "شخصيات وتراث", "Characters")
     )
 
     val pixel3dPhotos = listOf(
-        // Gym Equipment & Workouts (Existing + Expanded Pixers Strength Collection)
-        BuiltInPhotoSpec("res://img_3d_gym_workout", "دمبل تمرين", "Dumbbells", "gym"),
-        BuiltInPhotoSpec("res://img_3d_gym_chest", "تمرين الصدر", "Chest Press", "gym"),
-        BuiltInPhotoSpec("res://img_3d_gym_back", "تمرين الظهر", "Back Workout", "gym"),
-        BuiltInPhotoSpec("res://img_3d_gym_legs", "تمرين الرجل", "Leg Day", "gym"),
-        BuiltInPhotoSpec("res://img_3d_gym_legpress", "جهاز دفع الرجل", "Leg Press Machine", "gym"),
-        BuiltInPhotoSpec("res://img_3d_gym_lunges", "طعن بالدمبل", "Dumbbell Lunges", "gym"),
-        BuiltInPhotoSpec("res://img_3d_gym_arms", "تمرين الذراع والبار", "Arm Curl Bar", "gym"),
-        BuiltInPhotoSpec("res://img_3d_gym_shoulders", "تمرين الأكتاف", "Shoulder Press", "gym"),
-        BuiltInPhotoSpec("res://img_3d_strength_exercises#0", "الرفعة الميتة بالبار", "Barbell Deadlift", "gym"),
-        BuiltInPhotoSpec("res://img_3d_strength_exercises#1", "تمرين العقلة", "Pull-Ups", "gym"),
-        BuiltInPhotoSpec("res://img_3d_strength_exercises#2", "سحب الكابل للظهر", "Lat Pulldown", "gym"),
-        BuiltInPhotoSpec("res://img_3d_strength_exercises#3", "ضغط البنش بالبار", "Barbell Bench Press", "gym"),
-        BuiltInPhotoSpec("res://img_3d_strength_exercises#4", "تمرين الضغط", "Push-Ups", "gym"),
-        BuiltInPhotoSpec("res://img_3d_strength_exercises#5", "تمرين البلانك والبطن", "Core Plank", "gym"),
-        BuiltInPhotoSpec("res://img_3d_strength_exercises#6", "حبال القوة والتحدي", "Battle Ropes HIIT", "gym"),
-        BuiltInPhotoSpec("res://img_3d_strength_exercises#7", "أرجحة الكيتل بل", "Kettlebell Swing", "gym"),
-        BuiltInPhotoSpec("res://img_3d_strength_exercises#8", "إطالة ومرونة يوجا", "Stretch & Yoga", "gym"),
+        // === CHEST EXERCISES (New Pixar 3D Pack + Preserved Classics) ===
+        BuiltInPhotoSpec("res://img_3d_chest_pack#0", "بنش برس مسطح بالبار", "Flat Barbell Bench Press", "chest", setOf("gym")),
+        BuiltInPhotoSpec("res://img_3d_chest_pack#1", "صدر عالي بالدمبل", "Incline Dumbbell Press", "chest", setOf("gym")),
+        BuiltInPhotoSpec("res://img_3d_chest_pack#2", "جهاز ضغط صدر سفلي", "Decline Chest Machine", "chest", setOf("gym")),
+        BuiltInPhotoSpec("res://img_3d_chest_pack#3", "ضغط صدر مسطح بالدمبل", "Flat Dumbbell Press", "chest", setOf("gym")),
+        BuiltInPhotoSpec("res://img_3d_chest_pack#4", "تفتيح كابل كروس أوفر", "Cable Chest Crossover", "chest", setOf("gym")),
+        BuiltInPhotoSpec("res://img_3d_chest_pack#5", "جهاز الفراشة للصدر", "Pec Deck Butterfly Fly", "chest", setOf("gym")),
+        BuiltInPhotoSpec("res://img_3d_chest_pack#6", "تفتيح صدر بالدمبل", "Dumbbell Chest Fly", "chest", setOf("gym")),
+        BuiltInPhotoSpec("res://img_3d_chest_pack#7", "تمرين الضغط الواسع", "Wide-Grip Push-Ups", "chest", setOf("gym")),
+        BuiltInPhotoSpec("res://img_3d_chest_pack#8", "متوازي للصدر", "Parallel Bar Chest Dips", "chest", setOf("gym")),
+
+        // === BACK EXERCISES (New Pixar 3D Pack) ===
+        BuiltInPhotoSpec("res://img_3d_back_pack#0", "سحب عالي واسع للظهر", "Wide-Grip Lat Pulldown", "back", setOf("gym")),
+        BuiltInPhotoSpec("res://img_3d_back_pack#1", "عقلة كاملة للظهر", "Overhead Pull-Ups", "back", setOf("gym")),
+        BuiltInPhotoSpec("res://img_3d_back_pack#2", "سحب أرضي جالس بالكابل", "Seated Cable Row", "back", setOf("gym")),
+        BuiltInPhotoSpec("res://img_3d_back_pack#3", "منشار ظهر بالدمبل", "One-Arm Dumbbell Row", "back", setOf("gym")),
+        BuiltInPhotoSpec("res://img_3d_back_pack#4", "تجديف بالبار منحني", "Bent-Over Barbell Row", "back", setOf("gym")),
+        BuiltInPhotoSpec("res://img_3d_back_pack#5", "تجديف تي-بار للظهر", "T-Bar Landmine Row", "back", setOf("gym")),
+        BuiltInPhotoSpec("res://img_3d_back_pack#6", "سحب حبل للوجه والكتف الخلفي", "Cable Face Pulls", "back", setOf("shoulders_arms", "gym")),
+        BuiltInPhotoSpec("res://img_3d_back_pack#7", "تمرين القطنية وأسفل الظهر", "Lower Back Extension", "back", setOf("gym")),
+        BuiltInPhotoSpec("res://img_3d_back_pack#8", "سحب كابل ذراع مستقيمة", "Straight-Arm Pulldown", "back", setOf("gym")),
+
+        // === LEGS & GLUTES EXERCISES (New Pixar 3D Pack) ===
+        BuiltInPhotoSpec("res://img_3d_legs_pack#0", "سكوات خلفي بالبار", "Barbell Back Squat", "legs", setOf("gym")),
+        BuiltInPhotoSpec("res://img_3d_legs_pack#1", "دفع رجل مائل ٤٥ درجة", "Angled Leg Press", "legs", setOf("gym")),
+        BuiltInPhotoSpec("res://img_3d_legs_pack#2", "مشي الطعن بالدمبل", "Dumbbell Walking Lunges", "legs", setOf("gym")),
+        BuiltInPhotoSpec("res://img_3d_legs_pack#3", "رفرفة أماميات الرجل", "Seated Leg Extension", "legs", setOf("gym")),
+        BuiltInPhotoSpec("res://img_3d_legs_pack#4", "جهاز خلفيات الرجل نائم", "Lying Hamstring Curl", "legs", setOf("gym")),
+        BuiltInPhotoSpec("res://img_3d_legs_pack#5", "تمرين السمانة واقف", "Standing Calf Raises", "legs", setOf("gym")),
+        BuiltInPhotoSpec("res://img_3d_legs_pack#6", "ديدليفت روماني للخلفيات", "Romanian Deadlift", "legs", setOf("back", "gym")),
+        BuiltInPhotoSpec("res://img_3d_legs_pack#7", "دفع الحوض بالبار", "Barbell Hip Thrust", "legs", setOf("gym")),
+        BuiltInPhotoSpec("res://img_3d_legs_pack#8", "سكوات بلغاري فردي", "Bulgarian Split Squat", "legs", setOf("gym")),
+
+        // === ABS & CORE EXERCISES (New Pixar 3D Pack) ===
+        BuiltInPhotoSpec("res://img_3d_abs_core_pack#0", "طحن البطن على المرتبة", "Mat Ab Crunches", "abs", setOf("gym")),
+        BuiltInPhotoSpec("res://img_3d_abs_core_pack#1", "رفع الرجل معلق على العقلة", "Hanging Leg Raises", "abs", setOf("gym")),
+        BuiltInPhotoSpec("res://img_3d_abs_core_pack#2", "تمرين البلانك الثابت", "Forearm Plank Hold", "abs", setOf("gym")),
+        BuiltInPhotoSpec("res://img_3d_abs_core_pack#3", "بلانك جانبي للخواصر", "Side Plank Hold", "abs", setOf("gym")),
+        BuiltInPhotoSpec("res://img_3d_abs_core_pack#4", "بطن الدراجة الهوائية", "Bicycle Crunches", "abs", setOf("gym")),
+        BuiltInPhotoSpec("res://img_3d_abs_core_pack#5", "تمرين بطن بالحبل كابل", "Cable Rope Crunches", "abs", setOf("gym")),
+        BuiltInPhotoSpec("res://img_3d_abs_core_pack#6", "التفاف روسي بالكرة الطبية", "Russian Twists", "abs", setOf("gym")),
+        BuiltInPhotoSpec("res://img_3d_abs_core_pack#7", "عجلة البطن القوية", "Ab Wheel Rollout", "abs", setOf("gym")),
+        BuiltInPhotoSpec("res://img_3d_abs_core_pack#8", "متسلق الجبال للبطن والكارديو", "Mountain Climbers", "abs", setOf("cardio", "gym")),
+
+        // === SHOULDERS, ARMS, WARM-UP & RECOVERY (New Pixar 3D Pack) ===
+        BuiltInPhotoSpec("res://img_3d_shoulders_arms_recovery_pack#0", "رفرفة جانبي للأكتاف", "Lateral Shoulder Raises", "shoulders_arms", setOf("gym")),
+        BuiltInPhotoSpec("res://img_3d_shoulders_arms_recovery_pack#1", "ضغط أكتاف علوي بالدمبل", "Overhead Dumbbell Press", "shoulders_arms", setOf("gym")),
+        BuiltInPhotoSpec("res://img_3d_shoulders_arms_recovery_pack#2", "تبادل بايسبس بالدمبل", "Dumbbell Bicep Curls", "shoulders_arms", setOf("gym")),
+        BuiltInPhotoSpec("res://img_3d_shoulders_arms_recovery_pack#3", "تمرين شاكوش للذراع", "Dumbbell Hammer Curls", "shoulders_arms", setOf("gym")),
+        BuiltInPhotoSpec("res://img_3d_shoulders_arms_recovery_pack#4", "ترايسبس كابل بالحبل", "Cable Tricep Pushdown", "shoulders_arms", setOf("gym")),
+        BuiltInPhotoSpec("res://img_3d_shoulders_arms_recovery_pack#5", "غطس ترايسبس على البنش", "Bench Tricep Dips", "shoulders_arms", setOf("gym")),
+        BuiltInPhotoSpec("res://img_3d_shoulders_arms_recovery_pack#6", "إحماء القفز النجمي", "Jumping Jacks Warm-Up", "recovery", setOf("cardio")),
+        BuiltInPhotoSpec("res://img_3d_shoulders_arms_recovery_pack#7", "مشي سريع مائل على المشاية", "Incline Treadmill Walk", "cardio", setOf("recovery")),
+        BuiltInPhotoSpec("res://img_3d_shoulders_arms_recovery_pack#8", "إطالة واستشفاء بالفوم رولر", "Stretch & Foam Roll", "recovery", setOf("gym")),
+
+        // === PRESERVED EXISTING GYM, STRENGTH & GEAR COLLECTION (100% KEPT) ===
+        BuiltInPhotoSpec("res://img_3d_gym_workout", "دمبل تمرين", "Dumbbells", "gym", setOf("shoulders_arms")),
+        BuiltInPhotoSpec("res://img_3d_gym_chest", "تمرين الصدر", "Chest Press", "gym", setOf("chest")),
+        BuiltInPhotoSpec("res://img_3d_gym_back", "تمرين الظهر", "Back Workout", "gym", setOf("back")),
+        BuiltInPhotoSpec("res://img_3d_gym_legs", "تمرين الرجل", "Leg Day", "gym", setOf("legs")),
+        BuiltInPhotoSpec("res://img_3d_gym_legpress", "جهاز دفع الرجل", "Leg Press Machine", "gym", setOf("legs")),
+        BuiltInPhotoSpec("res://img_3d_gym_lunges", "طعن بالدمبل", "Dumbbell Lunges", "gym", setOf("legs")),
+        BuiltInPhotoSpec("res://img_3d_gym_arms", "تمرين الذراع والبار", "Arm Curl Bar", "gym", setOf("shoulders_arms")),
+        BuiltInPhotoSpec("res://img_3d_gym_shoulders", "تمرين الأكتاف", "Shoulder Press", "gym", setOf("shoulders_arms")),
+        BuiltInPhotoSpec("res://img_3d_strength_exercises#0", "الرفعة الميتة بالبار", "Barbell Deadlift", "gym", setOf("back", "legs")),
+        BuiltInPhotoSpec("res://img_3d_strength_exercises#1", "تمرين العقلة", "Pull-Ups", "gym", setOf("back")),
+        BuiltInPhotoSpec("res://img_3d_strength_exercises#2", "سحب الكابل للظهر", "Lat Pulldown", "gym", setOf("back")),
+        BuiltInPhotoSpec("res://img_3d_strength_exercises#3", "ضغط البنش بالبار", "Barbell Bench Press", "gym", setOf("chest")),
+        BuiltInPhotoSpec("res://img_3d_strength_exercises#4", "تمرين الضغط", "Push-Ups", "gym", setOf("chest")),
+        BuiltInPhotoSpec("res://img_3d_strength_exercises#5", "تمرين البلانك والبطن", "Core Plank", "gym", setOf("abs")),
+        BuiltInPhotoSpec("res://img_3d_strength_exercises#6", "حبال القوة والتحدي", "Battle Ropes HIIT", "gym", setOf("cardio")),
+        BuiltInPhotoSpec("res://img_3d_strength_exercises#7", "أرجحة الكيتل بل", "Kettlebell Swing", "gym", setOf("legs", "cardio")),
+        BuiltInPhotoSpec("res://img_3d_strength_exercises#8", "إطالة ومرونة يوجا", "Stretch & Yoga", "gym", setOf("recovery")),
         BuiltInPhotoSpec("res://img_gym_gear#0", "دمبل سداسي أسود", "Hex Dumbbells", "gym"),
         BuiltInPhotoSpec("res://img_gym_gear#1", "كيتل بل نعناعي", "Kettlebell", "gym"),
         BuiltInPhotoSpec("res://img_gym_gear#2", "بار أولمبي وأوزان", "Olympic Barbell", "gym"),
         BuiltInPhotoSpec("res://img_gym_gear#3", "بنش تمرين مائل", "Workout Bench", "gym"),
         BuiltInPhotoSpec("res://img_gym_gear#4", "جهاز العقلة والمتوازي", "Pull-Up Station", "gym"),
-        BuiltInPhotoSpec("res://img_gym_gear#5", "حبل قفز وأحزمة", "Jump Rope & Straps", "gym"),
-        BuiltInPhotoSpec("res://img_gym_gear#6", "قفازات ملاكمة", "Boxing Gloves", "gym"),
+        BuiltInPhotoSpec("res://img_gym_gear#5", "حبل قفز وأحزمة", "Jump Rope & Straps", "gym", setOf("cardio")),
+        BuiltInPhotoSpec("res://img_gym_gear#6", "قفازات ملاكمة", "Boxing Gloves", "gym", setOf("cardio")),
         BuiltInPhotoSpec("res://img_gym_gear#7", "طارات أوزان ملونة", "Weight Plates", "gym"),
-        BuiltInPhotoSpec("res://img_gym_gear#8", "شيكر ومنشفة جيم", "Shaker & Towel", "gym"),
-        BuiltInPhotoSpec("res://img_cardio_gym_machines#3", "جهاز الكابل كروس", "Cable Crossover", "gym"),
-        BuiltInPhotoSpec("res://img_cardio_gym_machines#4", "باور راك وسكوات", "Power Squat Rack", "gym"),
-        BuiltInPhotoSpec("res://img_cardio_gym_machines#6", "كرة طبية ومات تمرين", "Med Ball & Mat", "gym"),
-        BuiltInPhotoSpec("res://img_cardio_gym_machines#7", "كيس ملاكمة رياضي", "Heavy Punching Bag", "gym"),
-        BuiltInPhotoSpec("res://img_cardio_gym_machines#8", "فوم رولر وحبال مقاومة", "Roller & Bands", "gym"),
+        BuiltInPhotoSpec("res://img_gym_gear#8", "شيكر ومنشفة جيم", "Shaker & Towel", "gym", setOf("recovery")),
+        BuiltInPhotoSpec("res://img_cardio_gym_machines#3", "جهاز الكابل كروس", "Cable Crossover", "gym", setOf("chest")),
+        BuiltInPhotoSpec("res://img_cardio_gym_machines#4", "باور راك وسكوات", "Power Squat Rack", "gym", setOf("legs")),
+        BuiltInPhotoSpec("res://img_cardio_gym_machines#6", "كرة طبية ومات تمرين", "Med Ball & Mat", "gym", setOf("abs", "recovery")),
+        BuiltInPhotoSpec("res://img_cardio_gym_machines#7", "كيس ملاكمة رياضي", "Heavy Punching Bag", "gym", setOf("cardio")),
+        BuiltInPhotoSpec("res://img_cardio_gym_machines#8", "فوم رولر وحبال مقاومة", "Roller & Bands", "gym", setOf("recovery")),
 
-        // Cardio & Fitness Activities & Machines (Pixers Style)
+        // === PRESERVED CARDIO & FITNESS ACTIVITIES & MACHINES (100% KEPT) ===
         BuiltInPhotoSpec("res://img_3d_cardio_activities#0", "الجري على المشاية", "Treadmill Run", "cardio"),
         BuiltInPhotoSpec("res://img_3d_cardio_activities#1", "الجري والهرولة", "Outdoor Running", "cardio"),
         BuiltInPhotoSpec("res://img_3d_cardio_activities#2", "دراجة الكارديو الثابتة", "Spin Cycling", "cardio"),
         BuiltInPhotoSpec("res://img_3d_cardio_activities#3", "ركوب الدراجة", "Road Cycling", "cardio"),
         BuiltInPhotoSpec("res://img_3d_cardio_activities#4", "نط الحبل كارديو", "Jump Rope Cardio", "cardio"),
-        BuiltInPhotoSpec("res://img_3d_cardio_activities#5", "جهاز التجديف", "Rowing Workout", "cardio"),
+        BuiltInPhotoSpec("res://img_3d_cardio_activities#5", "جهاز التجديف", "Rowing Workout", "cardio", setOf("back")),
         BuiltInPhotoSpec("res://img_3d_cardio_activities#6", "جهاز الأوربتراك", "Elliptical Trainer", "cardio"),
-        BuiltInPhotoSpec("res://img_3d_cardio_activities#7", "جهاز صعود الدرج", "Stair Climber", "cardio"),
+        BuiltInPhotoSpec("res://img_3d_cardio_activities#7", "جهاز صعود الدرج", "Stair Climber", "cardio", setOf("legs")),
         BuiltInPhotoSpec("res://img_3d_cardio_activities#8", "كارديو وملاكمة", "Boxing Cardio", "cardio"),
         BuiltInPhotoSpec("res://img_cardio_gym_machines#0", "مشاية كهربائية", "Treadmill Machine", "cardio"),
         BuiltInPhotoSpec("res://img_cardio_gym_machines#1", "دراجة تمرين رياضية", "Exercise Spin Bike", "cardio"),
-        BuiltInPhotoSpec("res://img_cardio_gym_machines#2", "جهاز التجديف الرياضي", "Indoor Rower", "cardio"),
+        BuiltInPhotoSpec("res://img_cardio_gym_machines#2", "جهاز التجديف الرياضي", "Indoor Rower", "cardio", setOf("back")),
         BuiltInPhotoSpec("res://img_cardio_gym_machines#5", "حذاء جري وساعة", "Running Shoes", "cardio"),
 
         // Medieval Fruits

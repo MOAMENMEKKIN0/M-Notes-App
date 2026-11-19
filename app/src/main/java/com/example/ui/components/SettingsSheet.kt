@@ -38,6 +38,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Logout
 import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.Apps
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Backup
 import androidx.compose.material.icons.rounded.Brush
 import androidx.compose.material.icons.rounded.CheckCircle
@@ -150,6 +151,9 @@ fun SettingsSheet(
     val connectedEmail by viewModel.connectedEmail.collectAsStateWithLifecycle()
     val floatingBadges by viewModel.floatingBadges.collectAsStateWithLifecycle()
     val smartIconSettings by viewModel.smartIconSettings.collectAsStateWithLifecycle()
+    val screenDesignState by viewModel.screenDesignState.collectAsStateWithLifecycle()
+    val requestsState by viewModel.requestsState.collectAsStateWithLifecycle()
+    val requestsCount = (requestsState as? com.example.ui.UiState.Success)?.data?.size ?: 0
     val lastBackupStatus by viewModel.lastBackupStatus.collectAsStateWithLifecycle()
     val lastBackupError by viewModel.lastBackupError.collectAsStateWithLifecycle()
 
@@ -1732,7 +1736,13 @@ fun SettingsSheet(
                             openSubSection = if (openSubSection == "alerts") null else "alerts"
                         }
                     ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            BackgroundNotificationsHealthCard(
+                                lang = lang,
+                                onScheduleTestNotification = {
+                                    viewModel.scheduleTestLockScreenNotification(context, delaySeconds = 5)
+                                }
+                            )
                             SizeControlSliderRow(
                                 title = if (lang == "en") "Alert Avatar Photo Size" else "حجم الصورة داخل إشعار التنبيه",
                                 value = prefs.alertImgDp.toFloat(),
@@ -1757,6 +1767,32 @@ fun SettingsSheet(
                                 )
                             }
                         }
+                    }
+
+                    SettingsSubAccordion(
+                        title = if (lang == "en") {
+                            "Reminder Screen Background & Doodles"
+                        } else {
+                            "خلفية وزخارف شاشة التذكير"
+                        },
+                        isOpen = openSubSection == "reminderBg",
+                        onToggle = {
+                            viewModel.playSound("nav")
+                            openSubSection = if (openSubSection == "reminderBg") null else "reminderBg"
+                        }
+                    ) {
+                        ReminderBackgroundStudio(
+                            appliedThemeId = prefs.reminderBgThemeId,
+                            appliedDoodlePackId = prefs.reminderDoodlePackId,
+                            appliedDoodleOpacity = prefs.reminderDoodleOpacity,
+                            alertStyle = prefs.alertStyle,
+                            alertImgDp = prefs.alertImgDp,
+                            sampleTask = tasks.firstOrNull(),
+                            lang = lang,
+                            onApply = { themeId, doodlePackId, opacity ->
+                                viewModel.applyReminderBackground(themeId, doodlePackId, opacity)
+                            }
+                        )
                     }
 
                     SettingsSubAccordion(
@@ -2059,6 +2095,50 @@ fun SettingsSheet(
                     onSelect = {
                         viewModel.playSound("nav")
                         viewModel.updatePreference(mapOf("cardShape" to it))
+                    }
+                )
+            }
+
+            // 8A. Screen Design Presets & Theme Studio (Options A, B, C, D + Multiple Saved Custom Versions)
+            SettingsFolder(
+                title = if (lang == "en") {
+                    "Screen Design Themes (Options A, B, C, D)"
+                } else {
+                    "قوالب وتصاميم الشاشة (خيارات A, B, C, D)"
+                },
+                subtitle = if (lang == "en") {
+                    "Preview, test, customize shapes/colors/layout & save versions"
+                } else {
+                    "معاينة وتخصيص كامل للأشكال والألوان وحفظ عدة نسخ مخصصة"
+                },
+                icon = Icons.Rounded.AutoAwesome,
+                isOpen = openFolder == "screenDesigns",
+                lang = lang,
+                onToggle = {
+                    viewModel.playSound("nav")
+                    openFolder = if (openFolder == "screenDesigns") null else "screenDesigns"
+                }
+            ) {
+                ScreenDesignStudio(
+                    designState = screenDesignState,
+                    tasks = tasks,
+                    smartIconSettings = smartIconSettings,
+                    requestsCount = requestsCount,
+                    lang = lang,
+                    onApplyDesign = { designId, config, label ->
+                        viewModel.applyScreenDesign(designId, config, label)
+                    },
+                    onSaveCustomVersion = { name, basePresetId, config, overwriteId ->
+                        viewModel.saveCustomDesignVersion(name, basePresetId, config, overwriteId)
+                    },
+                    onDuplicateVersion = { id ->
+                        viewModel.duplicateSavedDesignVersion(id)
+                    },
+                    onRenameVersion = { id, newName ->
+                        viewModel.renameSavedDesignVersion(id, newName)
+                    },
+                    onDeleteVersion = { id ->
+                        viewModel.deleteSavedDesignVersion(id)
                     }
                 )
             }

@@ -48,11 +48,13 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.example.R
 import com.example.ui.theme.LocalMNotesColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.roundToInt
 
 val OrganicBlobShape: Shape = GenericShape { size, _ ->
@@ -66,9 +68,36 @@ val OrganicBlobShape: Shape = GenericShape { size, _ ->
     close()
 }
 
+val SoftPebbleShape: Shape = GenericShape { size, _ ->
+    val w = size.width
+    val h = size.height
+    moveTo(w * 0.46f, 0f)
+    cubicTo(w * 0.86f, 0f, w, h * 0.18f, w * 0.96f, h * 0.54f)
+    cubicTo(w * 0.92f, h * 0.92f, w * 0.68f, h, w * 0.40f, h * 0.97f)
+    cubicTo(w * 0.08f, h * 0.94f, 0f, h * 0.70f, w * 0.03f, h * 0.38f)
+    cubicTo(w * 0.06f, h * 0.10f, w * 0.20f, 0f, w * 0.46f, 0f)
+    close()
+}
+
+val SoftHexagonShape: Shape = GenericShape { size, _ ->
+    val w = size.width
+    val h = size.height
+    moveTo(w * 0.5f, 0f)
+    cubicTo(w * 0.64f, 0f, w * 0.92f, h * 0.14f, w * 0.96f, h * 0.28f)
+    cubicTo(w, h * 0.42f, w, h * 0.58f, w * 0.96f, h * 0.72f)
+    cubicTo(w * 0.92f, h * 0.86f, w * 0.64f, h, w * 0.5f, h)
+    cubicTo(w * 0.36f, h, w * 0.08f, h * 0.86f, w * 0.04f, h * 0.72f)
+    cubicTo(0f, h * 0.58f, 0f, h * 0.42f, w * 0.04f, h * 0.28f)
+    cubicTo(w * 0.08f, h * 0.14f, w * 0.36f, 0f, w * 0.5f, 0f)
+    close()
+}
+
 fun shapeForPhoto(shapeId: String): Shape = when (shapeId) {
     "ios" -> RoundedCornerShape(14.dp)
-    "blob" -> OrganicBlobShape
+    "squircle" -> RoundedCornerShape(28)
+    "blob", "organic_blob" -> OrganicBlobShape
+    "pebble" -> SoftPebbleShape
+    "soft_hex" -> SoftHexagonShape
     "strip" -> RectangleShape
     else -> CircleShape
 }
@@ -121,10 +150,23 @@ private fun builtInDrawableForName(name: String): Int? = when (name) {
     "img_3d_cardio_activities" -> R.drawable.img_3d_cardio_activities_1795097534637
     "img_3d_strength_exercises" -> R.drawable.img_3d_strength_exercises_1795097533008
     "img_cardio_gym_machines" -> R.drawable.img_cardio_gym_machines_1795097532792
+    // Expanded Pixar 3D Exercise Library Packs (45 new exercises)
+    "img_3d_chest_pack" -> R.drawable.img_3d_chest_pack_1795101792319
+    "img_3d_back_pack" -> R.drawable.img_3d_back_pack_1795101793333
+    "img_3d_legs_pack" -> R.drawable.img_3d_legs_pack_1795101792103
+    "img_3d_abs_core_pack" -> R.drawable.img_3d_abs_core_pack_1795101792740
+    "img_3d_shoulders_arms_recovery_pack" -> R.drawable.img_3d_shoulders_arms_recovery_pack_1795101792012
     else -> null
 }
 
-private fun parseBuiltInUri(uri: String): Pair<Int, Int?>? {
+/** Sheets that contain small bottom text captions inside each 3x3 cell; trim bottom 12% so circular avatars show pure artwork. */
+private fun bottomCaptionTrimFraction(resId: Int): Float = when (resId) {
+    R.drawable.img_3d_chest_pack_1795101792319,
+    R.drawable.img_3d_legs_pack_1795101792103 -> 0.13f
+    else -> 0.04f
+}
+
+internal fun parseBuiltInUri(uri: String): Pair<Int, Int?>? {
     if (!uri.startsWith("res://")) return null
     val raw = uri.removePrefix("res://")
     val hashIdx = raw.indexOf('#')
@@ -134,41 +176,105 @@ private fun parseBuiltInUri(uri: String): Pair<Int, Int?>? {
     return resId to tileIdx
 }
 
-private object GridTileBitmapCache {
-    private val cache = LruCache<String, ImageBitmap>(96)
+internal object GridTileBitmapCache {
+    private val cache = LruCache<String, ImageBitmap>(180)
+    private val rawBitmapCache = LruCache<String, Bitmap>(180)
+    private val sheetLocks = ConcurrentHashMap<Int, Any>()
 
     fun get(key: String): ImageBitmap? = cache.get(key)
 
+    fun getAndroidBitmap(key: String): Bitmap? = rawBitmapCache.get(key)
+
+    /**
+     * Decodes a 3x3 sheet ONCE per drawable resource and slices all 9 tiles into cache in one pass.
+     * Eliminates 9x duplicate JPEG decoding and prevents lag when browsing or switching images.
+     */
+    private fun decodeAndCacheEntireSheet(context: android.content.Context, resId: Int) {
+        val lock = sheetLocks.computeIfAbsent(resId) { Any() }
+        synchronized(lock) {
+            if (cache.get("$resId#0") != null && cache.get("$resId#8") != null) return
+            runCatching {
+                val opts = BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.ARGB_8888 }
+                val full = BitmapFactory.decodeResource(context.resources, resId, opts) ?: return
+                val cellW = full.width / 3f
+                val cellH = full.height / 3f
+                val marginX = cellW * 0.045f
+                val marginTop = cellH * 0.035f
+                val marginBottom = cellH * bottomCaptionTrimFraction(resId)
+                val targetMax = 300
+
+                for (tileIdx in 0..8) {
+                    val col = tileIdx % 3
+                    val row = tileIdx / 3
+                    val availW = (cellW - marginX * 2f).coerceAtLeast(1f)
+                    val availH = (cellH - marginTop - marginBottom).coerceAtLeast(1f)
+                    val side = minOf(availW, availH)
+                    val cropX = (col * cellW + (cellW - side) * 0.5f).roundToInt().coerceIn(0, full.width - 1)
+                    val cropY = (row * cellH + marginTop + (availH - side) * 0.5f).roundToInt().coerceIn(0, full.height - 1)
+                    val cropSide = side.roundToInt().coerceAtLeast(1)
+                        .coerceAtMost(minOf(full.width - cropX, full.height - cropY))
+                    val cell = Bitmap.createBitmap(full, cropX, cropY, cropSide, cropSide)
+                    val finalBmp = if (cell.width > targetMax || cell.height > targetMax) {
+                        val scaled = Bitmap.createScaledBitmap(cell, targetMax, targetMax, true)
+                        if (scaled != cell) cell.recycle()
+                        scaled
+                    } else {
+                        cell
+                    }
+                    val tileKey = "$resId#$tileIdx"
+                    rawBitmapCache.put(tileKey, finalBmp)
+                    cache.put(tileKey, finalBmp.asImageBitmap())
+                }
+                full.recycle()
+            }
+        }
+    }
+
     fun getOrLoad(context: android.content.Context, key: String, resId: Int, tileIndex: Int): ImageBitmap? {
         cache.get(key)?.let { return it }
-        val decoded = runCatching {
-            val opts = BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.ARGB_8888 }
-            val full = BitmapFactory.decodeResource(context.resources, resId, opts) ?: return null
-            val col = (tileIndex % 3).coerceIn(0, 2)
-            val row = (tileIndex / 3).coerceIn(0, 2)
-            val cellW = full.width / 3f
-            val cellH = full.height / 3f
-            val marginX = cellW * 0.04f
-            val marginY = cellH * 0.04f
-            val cropX = (col * cellW + marginX).roundToInt().coerceIn(0, full.width - 1)
-            val cropY = (row * cellH + marginY).roundToInt().coerceIn(0, full.height - 1)
-            val cropW = (cellW - marginX * 2f).roundToInt().coerceAtLeast(1).coerceAtMost(full.width - cropX)
-            val cropH = (cellH - marginY * 2f).roundToInt().coerceAtLeast(1).coerceAtMost(full.height - cropY)
-            val cell = Bitmap.createBitmap(full, cropX, cropY, cropW, cropH)
-            if (cell != full) full.recycle()
-            val targetMax = 320
-            val finalBmp = if (cell.width > targetMax || cell.height > targetMax) {
-                val scaled = Bitmap.createScaledBitmap(cell, targetMax, targetMax, true)
-                if (scaled != cell) cell.recycle()
-                scaled
-            } else {
-                cell
-            }
-            finalBmp.asImageBitmap()
-        }.getOrNull() ?: return null
-        cache.put(key, decoded)
-        return decoded
+        decodeAndCacheEntireSheet(context, resId)
+        return cache.get(key)
     }
+
+    fun getOrLoadAndroidBitmap(context: android.content.Context, resId: Int, tileIndex: Int): Bitmap? {
+        val key = "$resId#$tileIndex"
+        rawBitmapCache.get(key)?.let { return it }
+        decodeAndCacheEntireSheet(context, resId)
+        return rawBitmapCache.get(key)
+    }
+
+    fun prewarmUri(context: android.content.Context, uri: String) {
+        val parsed = parseBuiltInUri(uri) ?: return
+        val resId = parsed.first
+        val tileIndex = parsed.second ?: return
+        if (cache.get("$resId#$tileIndex") != null) return
+        decodeAndCacheEntireSheet(context, resId)
+    }
+}
+
+/**
+ * Decodes a task's image URI (built-in single, built-in 3x3 tile, or local file) into a compact
+ * Android [Bitmap] suitable for a lock-screen notification LargeIcon.
+ */
+fun decodeTaskPhotoBitmap(context: android.content.Context, imgUri: String): Bitmap? {
+    if (imgUri.isBlank()) return null
+    val parsed = parseBuiltInUri(imgUri)
+    return runCatching {
+        when {
+            parsed != null && parsed.second != null -> {
+                GridTileBitmapCache.getOrLoadAndroidBitmap(context, parsed.first, parsed.second!!)
+            }
+            parsed != null -> {
+                val opts = BitmapFactory.Options().apply { inSampleSize = 2 }
+                BitmapFactory.decodeResource(context.resources, parsed.first, opts)
+            }
+            File(imgUri).exists() -> {
+                val opts = BitmapFactory.Options().apply { inSampleSize = 2 }
+                BitmapFactory.decodeFile(imgUri, opts)
+            }
+            else -> null
+        }
+    }.getOrNull()
 }
 
 @Composable
@@ -186,15 +292,25 @@ fun MNotesPhotoContent(
             val resId = parsedBuiltIn.first
             val tileIndex = parsedBuiltIn.second!!
             val cacheKey = "$resId#$tileIndex"
-            val initialCached = GridTileBitmapCache.get(cacheKey)
-            val tileBitmap by produceState<ImageBitmap?>(initialValue = initialCached, key1 = cacheKey) {
-                if (value == null) {
-                    value = withContext(Dispatchers.IO) {
+            val immediateCached = GridTileBitmapCache.get(cacheKey)
+            // Tag produceState with cacheKey so switching from one tile image to another ALWAYS
+            // resets and loads the new tile immediately (never retains the previous task's bitmap).
+            val loadedPair by produceState<Pair<String, ImageBitmap?>>(
+                initialValue = cacheKey to immediateCached,
+                key1 = cacheKey
+            ) {
+                val existing = GridTileBitmapCache.get(cacheKey)
+                if (existing != null) {
+                    value = cacheKey to existing
+                } else {
+                    value = cacheKey to null
+                    val decoded = withContext(Dispatchers.IO) {
                         GridTileBitmapCache.getOrLoad(context, cacheKey, resId, tileIndex)
                     }
+                    value = cacheKey to decoded
                 }
             }
-            val bmp = tileBitmap
+            val bmp = immediateCached ?: if (loadedPair.first == cacheKey) loadedPair.second else null
             if (bmp != null) {
                 Image(
                     bitmap = bmp,
@@ -224,8 +340,15 @@ fun MNotesPhotoContent(
             )
         }
         imgUri.isNotBlank() && File(imgUri).exists() -> {
+            val file = File(imgUri)
+            val cacheKey = "${file.absolutePath}:${file.lastModified()}"
             AsyncImage(
-                model = File(imgUri),
+                model = ImageRequest.Builder(context)
+                    .data(file)
+                    .memoryCacheKey(cacheKey)
+                    .diskCacheKey(cacheKey)
+                    .crossfade(false)
+                    .build(),
                 contentDescription = contentDescription,
                 contentScale = ContentScale.Crop,
                 modifier = modifier
@@ -233,7 +356,12 @@ fun MNotesPhotoContent(
         }
         imgUri.isNotBlank() -> {
             AsyncImage(
-                model = imgUri,
+                model = ImageRequest.Builder(context)
+                    .data(imgUri)
+                    .memoryCacheKey(imgUri)
+                    .diskCacheKey(imgUri)
+                    .crossfade(false)
+                    .build(),
                 contentDescription = contentDescription,
                 contentScale = ContentScale.Crop,
                 modifier = modifier

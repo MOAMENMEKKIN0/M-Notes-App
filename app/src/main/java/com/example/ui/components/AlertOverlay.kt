@@ -68,6 +68,9 @@ fun AlertOverlay(
     alertStyle: String,
     alertImgDp: Int = 120,
     lang: String,
+    reminderBgThemeId: String = "default",
+    reminderDoodlePackId: String = "none",
+    reminderDoodleOpacity: Int = 14,
     onComplete: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -97,6 +100,7 @@ fun AlertOverlay(
     val subTextColor = if (isCompleting) Color.White.copy(alpha = 0.9f) else colors.textMuted
 
     val needsDim = alertStyle in listOf("A2", "A3", "A4", "A6")
+    val hasCustomWallpaper = ReminderWallpaperCatalog.isCustomized(reminderBgThemeId, reminderDoodlePackId)
 
     Box(
         modifier = Modifier
@@ -125,11 +129,24 @@ fun AlertOverlay(
                             } else {
                                 Brush.verticalGradient(listOf(colors.bgTopGlow, colors.bgMain, colors.cardBg))
                             }
-                        )
-                        .safeDrawingPadding()
-                        .padding(horizontal = 24.dp, vertical = 28.dp),
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
+                    if (!isCompleting && hasCustomWallpaper) {
+                        ReminderWallpaperCanvas(
+                            themeId = reminderBgThemeId,
+                            doodlePackId = reminderDoodlePackId,
+                            doodleOpacityPercent = reminderDoodleOpacity,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .safeDrawingPadding()
+                            .padding(horizontal = 24.dp, vertical = 28.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
@@ -199,6 +216,7 @@ fun AlertOverlay(
                             }
                         }
                     }
+                    }
                 }
             }
 
@@ -230,10 +248,22 @@ fun AlertOverlay(
                                 shape = RoundedCornerShape(26.dp)
                             )
                     ) {
-                        Column(
-                            modifier = Modifier.padding(22.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            if (!isCompleting && hasCustomWallpaper) {
+                                ReminderWallpaperCanvas(
+                                    themeId = reminderBgThemeId,
+                                    doodlePackId = reminderDoodlePackId,
+                                    doodleOpacityPercent = reminderDoodleOpacity,
+                                    compactScale = 0.72f,
+                                    modifier = Modifier.matchParentSize()
+                                )
+                            }
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(22.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
                             AlertAvatar(task = task, sizeDp = (alertImgDp * 0.68f).toInt().coerceIn(48, 160), ring = false)
                             Spacer(Modifier.height(12.dp))
                             Text(
@@ -281,6 +311,7 @@ fun AlertOverlay(
                                 }
                             }
                         }
+                        }
                     }
                 }
             }
@@ -299,11 +330,22 @@ fun AlertOverlay(
                             .fillMaxWidth()
                             .widthIn(max = 460.dp)
                     ) {
-                        Column(
-                            modifier = Modifier
-                                .navigationBarsPadding()
-                                .padding(horizontal = 18.dp, vertical = 16.dp)
-                        ) {
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            if (!isCompleting && hasCustomWallpaper) {
+                                ReminderWallpaperCanvas(
+                                    themeId = reminderBgThemeId,
+                                    doodlePackId = reminderDoodlePackId,
+                                    doodleOpacityPercent = reminderDoodleOpacity,
+                                    compactScale = 0.72f,
+                                    modifier = Modifier.matchParentSize()
+                                )
+                            }
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .navigationBarsPadding()
+                                    .padding(horizontal = 18.dp, vertical = 16.dp)
+                            ) {
                             Box(
                                 modifier = Modifier
                                     .align(Alignment.CenterHorizontally)
@@ -361,6 +403,7 @@ fun AlertOverlay(
                                 }
                             }
                         }
+                        }
                     }
                 }
             }
@@ -383,11 +426,23 @@ fun AlertOverlay(
                             .widthIn(max = 420.dp)
                             .border(1.5.dp, colors.primary, RoundedCornerShape(999.dp))
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            if (!isCompleting && hasCustomWallpaper) {
+                                ReminderWallpaperCanvas(
+                                    themeId = reminderBgThemeId,
+                                    doodlePackId = reminderDoodlePackId,
+                                    doodleOpacityPercent = reminderDoodleOpacity,
+                                    compactScale = 0.55f,
+                                    modifier = Modifier.matchParentSize()
+                                )
+                            }
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
                             Row(
                                 modifier = Modifier.weight(1f),
                                 verticalAlignment = Alignment.CenterVertically
@@ -440,6 +495,7 @@ fun AlertOverlay(
                                 }
                             }
                         }
+                        }
                     }
                 }
             }
@@ -462,7 +518,21 @@ fun AlertOverlay(
                             .widthIn(max = 420.dp)
                             .border(1.5.dp, colors.primary, RoundedCornerShape(22.dp))
                     ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            if (!isCompleting && hasCustomWallpaper) {
+                                ReminderWallpaperCanvas(
+                                    themeId = reminderBgThemeId,
+                                    doodlePackId = reminderDoodlePackId,
+                                    doodleOpacityPercent = reminderDoodleOpacity,
+                                    compactScale = 0.72f,
+                                    modifier = Modifier.matchParentSize()
+                                )
+                            }
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(14.dp)
+                            ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 AlertAvatar(task = task, sizeDp = (alertImgDp * 0.44f).toInt().coerceIn(36, 96), ring = false)
                                 Spacer(Modifier.width(10.dp))
@@ -509,6 +579,7 @@ fun AlertOverlay(
                                     )
                                 }
                             }
+                        }
                         }
                     }
                 }
