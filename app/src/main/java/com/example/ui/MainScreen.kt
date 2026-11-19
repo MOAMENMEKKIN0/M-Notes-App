@@ -59,6 +59,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.localization.AppStrings
 import com.example.model.SmartTask
 import com.example.ui.components.AlertOverlay
+import com.example.ui.components.FloatingCharacterBadgesOverlay
 import com.example.ui.components.HomeQuickOverviewSheet
 import com.example.ui.components.PhotoCropSheet
 import com.example.ui.components.PhotoPickerSheet
@@ -97,6 +98,7 @@ fun MainScreen(viewModel: MNotesViewModel) {
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val activeAlertTask by viewModel.activeAlertTask.collectAsStateWithLifecycle()
     val isBusyBackup by viewModel.isBusyBackup.collectAsStateWithLifecycle()
+    val floatingBadges by viewModel.floatingBadges.collectAsStateWithLifecycle()
 
     val colors = LocalMNotesColors.current
     val textScale = LocalMNotesTextScale.current
@@ -352,6 +354,23 @@ fun MainScreen(viewModel: MNotesViewModel) {
                     }
                 }
             }
+
+            // Draggable, Resizable, Persistent Original Circular Character Icon(s)
+            FloatingCharacterBadgesOverlay(
+                badges = floatingBadges,
+                lang = lang,
+                onUpdatePosition = { id, x, y -> viewModel.updateFloatingBadgePosition(id, x, y) },
+                onUpdateSize = { id, sizeDp -> viewModel.updateFloatingBadgeSize(id, sizeDp) },
+                onCycleState = { id, nextState -> viewModel.updateFloatingBadgeState(id, nextState) },
+                onDuplicate = { id -> viewModel.duplicateFloatingBadge(id) },
+                onHide = { id -> viewModel.toggleFloatingBadgeVisibility(id) },
+                onDelete = { id -> viewModel.deleteFloatingBadge(id) },
+                onOpenBadgeSettings = {
+                    viewModel.playSound("enter")
+                    initialSettingsFolder = "characterBadge"
+                    showSettings = true
+                }
+            )
 
             // Task Editor Modal Sheet
             if (showTaskEditor) {

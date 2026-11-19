@@ -46,6 +46,7 @@ import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Language
+import androidx.compose.material.icons.rounded.Mood
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -139,6 +140,7 @@ fun SettingsSheet(
     val credentialManager = remember(context) { CredentialManager.create(context) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val connectedEmail by viewModel.connectedEmail.collectAsStateWithLifecycle()
+    val floatingBadges by viewModel.floatingBadges.collectAsStateWithLifecycle()
 
     var openFolder by remember(initialFolder) { mutableStateOf(initialFolder) }
     var openSubSection by remember { mutableStateOf<String?>(null) }
@@ -1854,6 +1856,25 @@ fun SettingsSheet(
             ) {
                 RequestsSettingsFolderContent(
                     prefs = prefs,
+                    lang = lang,
+                    viewModel = viewModel
+                )
+            }
+
+            // 11. Dedicated Circular Character Icon Studio (Original Baby Badge Controls)
+            SettingsFolder(
+                title = if (lang == "en") "Circular Character Icon" else "الأيقونة الدائرية للشخصية (تحريك وتكرار وحالات)",
+                subtitle = if (lang == "en") "Move, resize, duplicate, hide/show & switch states" else "تحريك حر، تغيير الحجم، تكرار، إخفاء وتبديل الحالات",
+                icon = Icons.Rounded.Mood,
+                isOpen = openFolder == "characterBadge",
+                lang = lang,
+                onToggle = {
+                    viewModel.playSound("nav")
+                    openFolder = if (openFolder == "characterBadge") null else "characterBadge"
+                }
+            ) {
+                FloatingBadgeSettingsFolderContent(
+                    badges = floatingBadges,
                     lang = lang,
                     viewModel = viewModel
                 )

@@ -215,6 +215,17 @@ data class TrimmedRingtone(
 )
 
 @Serializable
+data class FloatingBadgeItem(
+    val id: String,
+    val state: String = "sleeping",
+    val xFraction: Float = 0.82f,
+    val yFraction: Float = 0.14f,
+    val sizeDp: Float = 46f,
+    val visible: Boolean = true,
+    val locked: Boolean = false
+)
+
+@Serializable
 data class BackupTaskDto(
     val title: String,
     val meta: String = "",
@@ -318,7 +329,8 @@ data class BackupSnapshotPayload(
     val savedAt: String = "",
     val preferences: BackupPreferencesDto = BackupPreferencesDto(),
     val tasks: List<BackupTaskDto> = emptyList(),
-    val requests: List<BackupRequestDto> = emptyList()
+    val requests: List<BackupRequestDto> = emptyList(),
+    val floatingBadges: List<FloatingBadgeItem> = emptyList()
 )
 
 data class AppThemeSpec(
@@ -370,6 +382,13 @@ data class LauncherIconSpec(
     val bgEnd: Color,
     val fgDrawableRes: Int,
     val isBitmapArt: Boolean = false
+)
+
+data class CharacterBadgeStateSpec(
+    val id: String,
+    val nameAr: String,
+    val nameEn: String,
+    val drawableRes: Int
 )
 
 object MNotesCatalog {
@@ -641,4 +660,46 @@ object MNotesCatalog {
 
     fun launcherIconById(id: String): LauncherIconSpec =
         launcherIcons.firstOrNull { it.id == id } ?: launcherIcons.first()
+
+    val characterBadgeStates = listOf(
+        CharacterBadgeStateSpec(
+            id = "sleeping",
+            nameAr = "نائم (الأصلي)",
+            nameEn = "Sleeping (Original)",
+            drawableRes = R.drawable.img_sleepy_badge_1795028747325
+        ),
+        CharacterBadgeStateSpec(
+            id = "awake",
+            nameAr = "مستيقظ",
+            nameEn = "Awake",
+            drawableRes = R.drawable.badge_state_awake_1795086987920
+        ),
+        CharacterBadgeStateSpec(
+            id = "resting",
+            nameAr = "مسترخي",
+            nameEn = "Resting",
+            drawableRes = R.drawable.badge_state_resting_1795086988544
+        ),
+        CharacterBadgeStateSpec(
+            id = "active",
+            nameAr = "نشيط",
+            nameEn = "Active",
+            drawableRes = R.drawable.badge_state_active_1795086988285
+        ),
+        CharacterBadgeStateSpec(
+            id = "happy",
+            nameAr = "سعيد",
+            nameEn = "Happy",
+            drawableRes = R.drawable.badge_state_happy_1795086989074
+        ),
+        CharacterBadgeStateSpec(
+            id = "focused",
+            nameAr = "مُركّز",
+            nameEn = "Focused",
+            drawableRes = R.drawable.badge_state_focused_1795087011566
+        )
+    )
+
+    fun characterBadgeStateById(id: String): CharacterBadgeStateSpec =
+        characterBadgeStates.firstOrNull { it.id == id } ?: characterBadgeStates.first()
 }

@@ -9,6 +9,7 @@ import com.example.model.BackupPreferencesDto
 import com.example.model.BackupRequestDto
 import com.example.model.BackupSnapshotPayload
 import com.example.model.BackupTaskDto
+import com.example.model.FloatingBadgeItem
 import com.example.model.QuickRequest
 import com.example.model.RepeatMode
 import com.example.model.SmartTask
@@ -66,7 +67,9 @@ private data class LocalWorkspaceState(
     val lastBackupLabel: String = "",
     val bannerImg: String = "default",
     val tasks: List<LocalTaskDto> = emptyList(),
-    val requests: List<LocalRequestDto> = emptyList()
+    val requests: List<LocalRequestDto> = emptyList(),
+    val floatingBadgesInitialized: Boolean = false,
+    val floatingBadges: List<FloatingBadgeItem> = emptyList()
 )
 
 class LocalStoreRepository(private val context: Context) {
@@ -200,8 +203,30 @@ class LocalStoreRepository(private val context: Context) {
             }
     }
 
+    val floatingBadgesFlow: Flow<List<FloatingBadgeItem>> = stateFlow.map { state ->
+        state.floatingBadges
+    }
+
     suspend fun ensureInitialized(): Result<Unit> = runWorkspaceEdit { state ->
-        if (state.initialized) return@runWorkspaceEdit state
+        val defaultBadge = FloatingBadgeItem(
+            id = "badge_original_1",
+            state = "sleeping",
+            xFraction = 0.82f,
+            yFraction = 0.14f,
+            sizeDp = 46f,
+            visible = true,
+            locked = false
+        )
+        if (state.initialized) {
+            return@runWorkspaceEdit if (!state.floatingBadgesInitialized) {
+                state.copy(
+                    floatingBadgesInitialized = true,
+                    floatingBadges = state.floatingBadges.ifEmpty { listOf(defaultBadge) }
+                )
+            } else {
+                state
+            }
+        }
         val today = AppStrings.todayStr()
         val nowOrder = System.currentTimeMillis()
         val starter1 = LocalTaskDto(
@@ -236,7 +261,9 @@ class LocalStoreRepository(private val context: Context) {
         )
         state.copy(
             initialized = true,
-            tasks = listOf(starter1, starter2)
+            tasks = listOf(starter1, starter2),
+            floatingBadgesInitialized = true,
+            floatingBadges = listOf(defaultBadge)
         )
     }
 
@@ -491,6 +518,87 @@ class LocalStoreRepository(private val context: Context) {
         state.copy(requests = state.requests.filterNot { it.id == requestId })
     }
 
+    suspend fun addFloatingBadge(
+        stateId: String = "sleeping",
+        sizeDp: Float = 46f
+    ): Result<String> {
+        val newId = "badge_${UUID.randomUUID().toString().take(8)}"
+        val res = runWorkspaceEdit { state ->
+            val count = state.floatingBadges.size
+            val x = (0.78f - (count % 4) * 0.14f).coerceIn(0.10f, 0.86f)
+            val y = (0.16f + (count / 4) * 0.10f + (count % 3) * 0.05f).coerceIn(0.10f, 0.82f)
+            val item = FloatingBadgeItem(
+                id = newId,
+                state = stateId,
+                xFraction = x,
+                yFraction = y,
+                sizeDp = sizeDp.coerceIn(26f, 180f),
+                visible = true,
+                locked = false
+            )
+            state.copy(
+                floatingBadgesInitialized = true,
+                floatingBadges = state.floatingBadges + item
+            )
+        }
+        return if (res.isSuccess) Result.success(newId) else Result.failure(res.exceptionOrNull()!!)
+    }
+
+    suspend fun duplicateFloatingBadge(badgeId: String): Result<String> {
+        val newId = "badge_${UUID.randomUUID().toString().take(8)}"
+        val res = runWorkspaceEdit { state ->
+            val source = state.floatingBadges.firstOrNull { it.id == badgeId }
+                ?: return@runWorkspaceEdit state
+            val nextX = if (source.xFraction + 0.08f <= 0.88f) source.xFraction + 0.08f else (source.xFraction - 0.10f).coerceAtLeast(0.06f)
+            val nextY = if (source.yFraction + 0.06f <= 0.86f) source.yFraction + 0.06f else (source.yFraction - 0.08f).coerceAtLeast(0.08f)
+            val copy = source.copy(
+                id = newId,
+                xFraction = nextX,
+                yFraction = nextY,
+                visible = true,
+                locked = false
+            )
+            state.copy(
+                floatingBadgesInitialized = true,
+                floatingBadges = state.floatingBadges + copy
+            )
+        }
+        return if (res.isSuccess) Result.success(newId) else Result.failure(res.exceptionOrNull()!!)
+    }
+
+    suspend fun updateFloatingBadge(
+        badgeId: String,
+        transform: (FloatingBadgeItem) -> FloatingBadgeItem
+    ): Result<Unit> = runWorkspaceEdit { state ->
+        val updated = state.floatingBadges.map { existing ->
+            if (existing.id == badgeId) {
+                val next = transform(existing)
+                next.copy(
+                    xFraction = next.xFraction.coerceIn(0f, 1f),
+                    yFraction = next.yFraction.coerceIn(0f, 1f),
+                    sizeDp = next.sizeDp.coerceIn(26f, 180f)
+                )
+            } else {
+                existing
+            }
+        }
+        state.copy(floatingBadgesInitialized = true, floatingBadges = updated)
+    }
+
+    suspend fun setAllFloatingBadgesVisibility(visible: Boolean): Result<Unit> = runWorkspaceEdit { state ->
+        state.copy(
+            floatingBadgesInitialized = true,
+            floatingBadges = state.floatingBadges.map { it.copy(visible = visible) }
+        )
+    }
+
+    suspend fun deleteFloatingBadge(badgeId: String): Result<Unit> = runWorkspaceEdit { state ->
+        state.copy(
+            floatingBadgesInitialized = true,
+            floatingBadges = state.floatingBadges.filterNot { it.id == badgeId }
+        )
+    }
+
     suspend fun restoreFromSnapshot(snapshot: BackupSnapshotPayload): Result<Unit> = runWorkspaceEdit { state ->
         val p = snapshot.preferences
         val normalizedPrefs = p.copy(
@@ -551,7 +659,19 @@ class LocalStoreRepository(private val context: Context) {
             initialized = true,
             preferences = normalizedPrefs,
             tasks = restoredTasks,
-            requests = restoredReqs
+            requests = restoredReqs,
+            floatingBadgesInitialized = true,
+            floatingBadges = if (snapshot.floatingBadges.isNotEmpty()) {
+                snapshot.floatingBadges.map { b ->
+                    b.copy(
+                        xFraction = b.xFraction.coerceIn(0f, 1f),
+                        yFraction = b.yFraction.coerceIn(0f, 1f),
+                        sizeDp = b.sizeDp.coerceIn(26f, 180f)
+                    )
+                }
+            } else {
+                state.floatingBadges
+            }
         )
     }
 

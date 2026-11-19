@@ -13,6 +13,7 @@ import com.example.model.BackupPreferencesDto
 import com.example.model.BackupRequestDto
 import com.example.model.BackupSnapshotPayload
 import com.example.model.BackupTaskDto
+import com.example.model.FloatingBadgeItem
 import com.example.model.LibraryPhoto
 import com.example.model.QuickRequest
 import com.example.model.RepeatMode
@@ -108,6 +109,9 @@ class MNotesViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
     val trimmedRingtones: StateFlow<List<TrimmedRingtone>> = mediaRepository.ringtonesFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+
+    val floatingBadges: StateFlow<List<FloatingBadgeItem>> = localStore.floatingBadgesFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
     private val _searchQuery = MutableStateFlow("")
@@ -579,6 +583,77 @@ class MNotesViewModel(
         }
     }
 
+    fun addFloatingBadge(stateId: String = "sleeping", sizeDp: Float = 46f) {
+        playSound("done")
+        viewModelScope.launch {
+            localStore.addFloatingBadge(stateId = stateId, sizeDp = sizeDp)
+        }
+    }
+
+    fun duplicateFloatingBadge(badgeId: String) {
+        playSound("done")
+        viewModelScope.launch {
+            localStore.duplicateFloatingBadge(badgeId)
+        }
+    }
+
+    fun updateFloatingBadgePosition(badgeId: String, xFraction: Float, yFraction: Float) {
+        viewModelScope.launch {
+            localStore.updateFloatingBadge(badgeId) { cur ->
+                cur.copy(xFraction = xFraction, yFraction = yFraction)
+            }
+        }
+    }
+
+    fun updateFloatingBadgeSize(badgeId: String, sizeDp: Float) {
+        viewModelScope.launch {
+            localStore.updateFloatingBadge(badgeId) { cur ->
+                cur.copy(sizeDp = sizeDp)
+            }
+        }
+    }
+
+    fun updateFloatingBadgeState(badgeId: String, stateId: String) {
+        playSound("nav")
+        viewModelScope.launch {
+            localStore.updateFloatingBadge(badgeId) { cur ->
+                cur.copy(state = stateId)
+            }
+        }
+    }
+
+    fun toggleFloatingBadgeVisibility(badgeId: String) {
+        playSound("nav")
+        viewModelScope.launch {
+            localStore.updateFloatingBadge(badgeId) { cur ->
+                cur.copy(visible = !cur.visible)
+            }
+        }
+    }
+
+    fun toggleFloatingBadgeLock(badgeId: String) {
+        playSound("nav")
+        viewModelScope.launch {
+            localStore.updateFloatingBadge(badgeId) { cur ->
+                cur.copy(locked = !cur.locked)
+            }
+        }
+    }
+
+    fun setAllFloatingBadgesVisibility(visible: Boolean) {
+        playSound("nav")
+        viewModelScope.launch {
+            localStore.setAllFloatingBadgesVisibility(visible)
+        }
+    }
+
+    fun deleteFloatingBadge(badgeId: String) {
+        playSound("exit")
+        viewModelScope.launch {
+            localStore.deleteFloatingBadge(badgeId)
+        }
+    }
+
     suspend fun cropAndSavePhoto(
         uri: Uri,
         offsetXNorm: Float,
@@ -760,7 +835,8 @@ class MNotesViewModel(
                     splitMode = it.splitMode,
                     isChecklistOrder = it.isChecklistOrder
                 )
-            }
+            },
+            floatingBadges = floatingBadges.value
         )
     }
 
