@@ -39,32 +39,37 @@ class TaskReminderReceiver : BroadcastReceiver() {
 
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             try {
-                when (action) {
-                    TaskAlarmScheduler.ACTION_TRIGGER_TASK_REMINDER -> {
-                        handleTaskReminder(appCtx, intent)
-                    }
-                    TaskAlarmScheduler.ACTION_TEST_REMINDER -> {
-                        val lang = intent.getStringExtra(TaskAlarmScheduler.EXTRA_LANG) ?: "ar"
-                        showTestLockScreenNotification(appCtx, lang)
-                    }
-                    TaskAlarmScheduler.ACTION_MARK_DONE -> {
-                        val taskId = intent.getStringExtra(TaskAlarmScheduler.EXTRA_TASK_ID).orEmpty()
-                        if (taskId.isNotBlank()) {
-                            handleMarkDoneAction(appCtx, taskId)
-                        }
-                    }
-                    TaskAlarmScheduler.ACTION_SNOOZE_10M -> {
-                        val taskId = intent.getStringExtra(TaskAlarmScheduler.EXTRA_TASK_ID).orEmpty()
-                        if (taskId.isNotBlank()) {
-                            handleSnoozeAction(appCtx, taskId)
-                        }
-                    }
-                }
+                processIntent(appCtx, intent, action)
             } finally {
                 runCatching {
                     if (wakeLock?.isHeld == true) wakeLock.release()
                 }
                 pendingResult.finish()
+            }
+        }
+    }
+
+    internal suspend fun processIntent(context: Context, intent: Intent, action: String) {
+        TaskAlarmScheduler.ensureNotificationChannel(context)
+        when (action) {
+            TaskAlarmScheduler.ACTION_TRIGGER_TASK_REMINDER -> {
+                handleTaskReminder(context, intent)
+            }
+            TaskAlarmScheduler.ACTION_TEST_REMINDER -> {
+                val lang = intent.getStringExtra(TaskAlarmScheduler.EXTRA_LANG) ?: "ar"
+                showTestLockScreenNotification(context, lang)
+            }
+            TaskAlarmScheduler.ACTION_MARK_DONE -> {
+                val taskId = intent.getStringExtra(TaskAlarmScheduler.EXTRA_TASK_ID).orEmpty()
+                if (taskId.isNotBlank()) {
+                    handleMarkDoneAction(context, taskId)
+                }
+            }
+            TaskAlarmScheduler.ACTION_SNOOZE_10M -> {
+                val taskId = intent.getStringExtra(TaskAlarmScheduler.EXTRA_TASK_ID).orEmpty()
+                if (taskId.isNotBlank()) {
+                    handleSnoozeAction(context, taskId)
+                }
             }
         }
     }
@@ -79,7 +84,7 @@ class TaskReminderReceiver : BroadcastReceiver() {
         val lang = prefs.lang
         val storedTask = repo.getTasksSnapshot().firstOrNull { it.id == taskId }
 
-        // If the task was deleted or alerts were disabled since scheduling, do not fire
+        // If the task was deleted or alerts were disabled since scheduling, cancel & skip
         if (storedTask == null || !storedTask.alertEnabled) {
             TaskAlarmScheduler.cancelTaskAlarm(context, taskId)
             return
@@ -100,6 +105,9 @@ class TaskReminderReceiver : BroadcastReceiver() {
             storedTask.meta
         }
         val bodyText = buildString {
+            if (isSnooze) {
+                append(if (lang == "en") "Snoozed • " else "غفوة • ")
+            }
             if (timeText.isNotBlank()) {
                 append(timeText)
             }
@@ -119,7 +127,10 @@ class TaskReminderReceiver : BroadcastReceiver() {
             }
         }
 
-        val largeIcon = decodeTaskPhotoBitmap(context, storedTask.imgUri)
+        val imgToDecode = storedTask.imgUri.ifBlank {
+            intent.getStringExtra(TaskAlarmScheduler.EXTRA_TASK_IMG).orEmpty()
+        }
+        val largeIcon = decodeTaskPhotoBitmap(context, imgToDecode)
 
         val openIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
@@ -154,26 +165,26 @@ class TaskReminderReceiver : BroadcastReceiver() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-            ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+        val channelId = TaskAlarmScheduler.channelIdForPreferences(
+            soundEnabled = prefs.soundDone,
+            vibrationEnabled = prefs.hapticEnabled
+        )
+        val soundUri = if (prefs.soundDone) {
+            RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+        } else {
+            null
+        }
 
-        val notification = NotificationCompat.Builder(context, TaskAlarmScheduler.CHANNEL_ID)
+        val builder = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(R.drawable.ic_notification_bell)
             .setContentTitle(title)
             .setContentText(bodyText)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(bodyText))
-            .apply {
-                if (largeIcon != null) {
-                    setLargeIcon(largeIcon)
-                }
-            }
             .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setAutoCancel(true)
             .setDefaults(NotificationCompat.DEFAULT_LIGHTS)
-            .setSound(soundUri)
-            .setVibrate(longArrayOf(0, 350, 180, 350, 180, 500))
             .setContentIntent(contentPi)
             .addAction(
                 0,
@@ -185,24 +196,43 @@ class TaskReminderReceiver : BroadcastReceiver() {
                 if (lang == "en") "Snooze 10m" else "غفوة ١٠ د",
                 snoozePi
             )
-            .build()
+
+        if (soundUri != null) {
+            builder.setSound(soundUri)
+        } else {
+            builder.setSilent(!prefs.hapticEnabled)
+        }
+        if (prefs.hapticEnabled) {
+            builder.setVibrate(longArrayOf(0, 320, 160, 320, 160, 420))
+        }
+        if (largeIcon != null) {
+            builder.setLargeIcon(largeIcon)
+            builder.setStyle(
+                NotificationCompat.BigPictureStyle()
+                    .bigPicture(largeIcon)
+                    .bigLargeIcon(null as android.graphics.Bitmap?)
+                    .setSummaryText(bodyText)
+            )
+        } else {
+            builder.setStyle(NotificationCompat.BigTextStyle().bigText(bodyText))
+        }
 
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
         if (TaskAlarmScheduler.hasNotificationPermission(context)) {
-            nm?.notify(TaskAlarmScheduler.notificationIdForTask(storedTask.id), notification)
+            nm?.notify(TaskAlarmScheduler.notificationIdForTask(storedTask.id), builder.build())
         }
 
-        // Immediately schedule the next occurrence for recurring tasks so they keep working
-        // even if the user never opens the app!
+        // Schedule next occurrence for recurring tasks automatically (without cancelling snooze)
         if (!isSnooze && storedTask.repeat != RepeatMode.NONE) {
             val updatedTask = storedTask.copy(lastAlertedDate = today)
-            TaskAlarmScheduler.scheduleTaskAlarm(context, updatedTask, lang)
+            TaskAlarmScheduler.scheduleTaskAlarm(context, updatedTask, lang, isSnooze = false)
         }
     }
 
     private suspend fun handleMarkDoneAction(context: Context, taskId: String) {
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
         nm?.cancel(TaskAlarmScheduler.notificationIdForTask(taskId))
+        TaskAlarmScheduler.cancelSnoozeAlarmOnly(context, taskId)
 
         val repo = LocalStoreRepository(context)
         val prefs = repo.getPreferencesSnapshot()
@@ -254,7 +284,14 @@ class TaskReminderReceiver : BroadcastReceiver() {
         )
     }
 
-    private fun showTestLockScreenNotification(context: Context, lang: String) {
+    private suspend fun showTestLockScreenNotification(context: Context, lang: String) {
+        val repo = LocalStoreRepository(context)
+        val prefs = repo.getPreferencesSnapshot()
+        val channelId = TaskAlarmScheduler.channelIdForPreferences(
+            soundEnabled = prefs.soundDone,
+            vibrationEnabled = prefs.hapticEnabled
+        )
+
         val openIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
@@ -272,16 +309,15 @@ class TaskReminderReceiver : BroadcastReceiver() {
             "ستصلك تنبيهات مهامك وتمارينك في موعدها حتى عند إغلاق التطبيق أو قفل الشاشة."
         }
 
-        val notification = NotificationCompat.Builder(context, TaskAlarmScheduler.CHANNEL_ID)
+        val notification = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(R.drawable.ic_notification_bell)
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setAutoCancel(true)
-            .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setContentIntent(contentPi)
             .build()
 

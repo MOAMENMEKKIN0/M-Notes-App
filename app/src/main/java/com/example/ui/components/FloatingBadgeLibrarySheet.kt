@@ -220,32 +220,31 @@ fun TaskBadgeLibrarySheet(
                 }
             }
 
-            // Prominent APPLY Button
+            // Prominent OK • Save & Apply Button (saves immediately BEFORE closing)
             Button(
                 onClick = {
-                    safeDismisser.dismissWith {
-                        onApply(
-                            draftIconId,
-                            draftSizeDp,
-                            draftOffsetX,
-                            draftOffsetY,
-                            draftCategory,
-                            draftSmartMode,
-                            draftLocked
-                        )
-                    }
+                    onApply(
+                        draftIconId,
+                        draftSizeDp,
+                        draftOffsetX,
+                        draftOffsetY,
+                        draftCategory,
+                        draftSmartMode,
+                        draftLocked
+                    )
+                    safeDismisser.dismiss()
                 },
                 shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(46.dp)
+                    .height(48.dp)
                     .testTag("task_library_apply_btn")
             ) {
                 Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
                 Text(
-                    text = if (lang == "en") "Apply Icon to Task Circle" else "تطبيق الأيقونة على دائرة المهمة",
+                    text = if (lang == "en") "OK • Save & Apply to Task Circle" else "موافق • حفظ وتطبيق على دائرة المهمة",
                     fontSize = 13.sp,
                     fontWeight = FontWeight.ExtraBold
                 )
@@ -413,7 +412,7 @@ fun TaskBadgeLibrarySheet(
                 singleLine = true,
                 placeholder = {
                     Text(
-                        text = if (lang == "en") "Search 110+ icons (Zzz, gym, coffee, walk, food...)" else "ابحث بين 110+ أيقونة (نوم، جيم، قهوة، مشي، أكل...)",
+                        text = if (lang == "en") "Search 150+ icons (3D guys, Zzz, gym, coffee, food...)" else "ابحث بين 150+ أيقونة (شخصيات 3D، نوم، جيم، قهوة...)",
                         fontSize = 12.sp
                     )
                 },
@@ -550,16 +549,16 @@ fun TaskBadgeLibrarySheet(
 /**
  * Dedicated Icon Selection Library opened when tapping an independent screen-wide
  * floating circular icon on screen.
+ * Uses local draft state + an explicit prominent OK / Save & Apply button that saves
+ * immediately before closing so changes always persist permanently.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FloatingBadgeLibrarySheet(
     badge: FloatingBadgeItem,
     lang: String,
-    onSelectIcon: (String) -> Unit,
-    onUpdateSize: (Float) -> Unit,
+    onConfirmSave: (iconId: String, sizeDp: Float, locked: Boolean) -> Unit,
     onDuplicate: () -> Unit,
-    onToggleLock: () -> Unit,
     onHide: () -> Unit,
     onDelete: () -> Unit,
     onOpenFullStudio: () -> Unit,
@@ -569,10 +568,14 @@ fun FloatingBadgeLibrarySheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val safeDismisser = rememberSafeSheetDismisser(sheetState, onDismiss)
 
+    var draftIconId by remember(badge.id) { mutableStateOf(badge.state) }
+    var draftSizeDp by remember(badge.id) { mutableFloatStateOf(badge.sizeDp.coerceIn(26f, 180f)) }
+    var draftLocked by remember(badge.id) { mutableStateOf(badge.locked) }
+
     var selectedCategoryId by remember { mutableStateOf("all") }
     var searchQuery by remember { mutableStateOf("") }
 
-    val activeSpec = remember(badge.state) { FloatingBadgeCatalog.byId(badge.state) }
+    val activeSpec = remember(draftIconId) { FloatingBadgeCatalog.byId(draftIconId) }
     val filteredIcons = remember(selectedCategoryId, searchQuery) {
         FloatingBadgeCatalog.filter(selectedCategoryId, searchQuery)
     }
@@ -588,6 +591,7 @@ fun FloatingBadgeLibrarySheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
@@ -598,15 +602,15 @@ fun FloatingBadgeLibrarySheet(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(66.dp)
+                        .size(70.dp)
                         .clip(RoundedCornerShape(18.dp))
                         .background(colors.cardBg)
                         .border(1.2.dp, colors.primary.copy(alpha = 0.35f), RoundedCornerShape(18.dp)),
                     contentAlignment = Alignment.Center
                 ) {
                     FloatingBadgeVisual(
-                        iconId = badge.state,
-                        sizeDp = 44f,
+                        iconId = draftIconId,
+                        sizeDp = draftSizeDp.coerceIn(28f, 54f),
                         contentDescription = if (lang == "en") activeSpec.nameEn else activeSpec.nameAr
                     )
                 }
@@ -620,9 +624,9 @@ fun FloatingBadgeLibrarySheet(
                     )
                     Text(
                         text = if (lang == "en") {
-                            "${activeSpec.nameEn} • Size ${badge.sizeDp.roundToInt()}dp • Hold & drag to move"
+                            "${activeSpec.nameEn} • Size ${draftSizeDp.roundToInt()}dp • Press OK to save"
                         } else {
-                            "${activeSpec.nameAr} • الحجم ${badge.sizeDp.roundToInt()} • اضغط مطولاً واسحب للتحريك"
+                            "${activeSpec.nameAr} • الحجم ${draftSizeDp.roundToInt()} • اضغط موافق للحفظ"
                         },
                         color = colors.textMuted,
                         fontSize = 11.sp,
@@ -650,6 +654,28 @@ fun FloatingBadgeLibrarySheet(
                 }
             }
 
+            // Real Prominent OK / Save & Apply Button (commits immediately BEFORE dismissing!)
+            Button(
+                onClick = {
+                    onConfirmSave(draftIconId, draftSizeDp, draftLocked)
+                    safeDismisser.dismiss()
+                },
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .testTag("floating_badge_ok_button")
+            ) {
+                Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = if (lang == "en") "OK • Save & Apply Icon" else "موافق • حفظ وتطبيق الأيقونة",
+                    fontSize = 13.5.sp,
+                    fontWeight = FontWeight.ExtraBold
+                )
+            }
+
             Surface(
                 shape = RoundedCornerShape(16.dp),
                 color = colors.cardBg,
@@ -667,7 +693,7 @@ fun FloatingBadgeLibrarySheet(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = if (lang == "en") "Live Size" else "تغيير الحجم فوراً",
+                            text = if (lang == "en") "Icon Size" else "حجم الأيقونة",
                             color = colors.textDark,
                             fontSize = 11.5.sp,
                             fontWeight = FontWeight.ExtraBold
@@ -679,10 +705,10 @@ fun FloatingBadgeLibrarySheet(
                             LibraryStepBtn(
                                 icon = Icons.Rounded.Remove,
                                 desc = if (lang == "en") "Smaller" else "تصغير",
-                                onClick = { onUpdateSize((badge.sizeDp - 6f).coerceAtLeast(26f)) }
+                                onClick = { draftSizeDp = (draftSizeDp - 6f).coerceAtLeast(26f) }
                             )
                             Text(
-                                text = "${badge.sizeDp.roundToInt()} dp",
+                                text = "${draftSizeDp.roundToInt()} dp",
                                 color = colors.primary,
                                 fontSize = 11.5.sp,
                                 fontWeight = FontWeight.ExtraBold
@@ -690,13 +716,13 @@ fun FloatingBadgeLibrarySheet(
                             LibraryStepBtn(
                                 icon = Icons.Rounded.Add,
                                 desc = if (lang == "en") "Larger" else "تكبير",
-                                onClick = { onUpdateSize((badge.sizeDp + 6f).coerceAtMost(180f)) }
+                                onClick = { draftSizeDp = (draftSizeDp + 6f).coerceAtMost(180f) }
                             )
                         }
                     }
                     Slider(
-                        value = badge.sizeDp.coerceIn(26f, 180f),
-                        onValueChange = onUpdateSize,
+                        value = draftSizeDp.coerceIn(26f, 180f),
+                        onValueChange = { draftSizeDp = it },
                         valueRange = 26f..180f,
                         colors = SliderDefaults.colors(
                             thumbColor = colors.primary,
@@ -724,15 +750,15 @@ fun FloatingBadgeLibrarySheet(
                     tag = "library_duplicate_badge"
                 )
                 LibraryActionPill(
-                    icon = if (badge.locked) Icons.Rounded.Lock else Icons.Rounded.LockOpen,
-                    label = if (badge.locked) {
+                    icon = if (draftLocked) Icons.Rounded.Lock else Icons.Rounded.LockOpen,
+                    label = if (draftLocked) {
                         if (lang == "en") "Locked" else "مقفولة"
                     } else {
                         if (lang == "en") "Free Drag" else "سحب حر"
                     },
-                    tint = if (badge.locked) colors.primary else colors.textDark,
-                    bg = if (badge.locked) colors.primarySoft else colors.cardBg,
-                    onClick = onToggleLock,
+                    tint = if (draftLocked) colors.primary else colors.textDark,
+                    bg = if (draftLocked) colors.primarySoft else colors.cardBg,
+                    onClick = { draftLocked = !draftLocked },
                     tag = "library_lock_badge"
                 )
                 LibraryActionPill(
@@ -775,7 +801,7 @@ fun FloatingBadgeLibrarySheet(
                 singleLine = true,
                 placeholder = {
                     Text(
-                        text = if (lang == "en") "Search 110+ icons (Zzz, gym, coffee, walk, food...)" else "ابحث بين 110+ أيقونة (نوم، جيم، قهوة، مشي، أكل...)",
+                        text = if (lang == "en") "Search 150+ icons (3D guys, Zzz, gym, coffee, food...)" else "ابحث بين 150+ أيقونة (شخصيات 3D، نوم، جيم، قهوة...)",
                         fontSize = 12.sp
                     )
                 },
@@ -844,11 +870,11 @@ fun FloatingBadgeLibrarySheet(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(340.dp)
+                    .height(330.dp)
                     .testTag("badge_library_grid")
             ) {
                 items(filteredIcons, key = { it.id }) { spec ->
-                    val isSelected = badge.state == spec.id
+                    val isSelected = draftIconId == spec.id
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(5.dp),
@@ -861,7 +887,7 @@ fun FloatingBadgeLibrarySheet(
                                 shape = RoundedCornerShape(16.dp)
                             )
                             .clickable {
-                                onSelectIcon(spec.id)
+                                draftIconId = spec.id
                             }
                             .padding(top = 12.dp, bottom = 7.dp, start = 4.dp, end = 4.dp)
                             .testTag("badge_pick_${spec.id}")

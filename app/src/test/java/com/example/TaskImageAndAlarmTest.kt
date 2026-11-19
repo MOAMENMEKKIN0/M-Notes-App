@@ -1,13 +1,15 @@
 package com.example
 
+import com.example.model.ChecklistStyleCatalog
+import com.example.model.ChecklistStyleConfig
 import com.example.model.MNotesCatalog
+import com.example.model.MainWallpaperCatalog
+import com.example.model.OrderTextSplitter
 import com.example.model.RepeatMode
-import com.example.model.SavedScreenDesignVersion
-import com.example.model.ScreenDesignPresets
-import com.example.model.ScreenDesignStoreState
 import com.example.model.SmartTask
 import com.example.model.UserPreferences
 import com.example.notification.TaskAlarmScheduler
+import com.example.ui.components.FloatingBadgeCatalog
 import com.example.ui.components.ReminderWallpaperCatalog
 import com.example.ui.components.parseBuiltInUri
 import kotlinx.serialization.encodeToString
@@ -252,64 +254,64 @@ class TaskImageAndAlarmTest {
     }
 
     @Test
-    fun screenDesignPresets_defaultUnchangedAndAllFourPermanentPresetsImmutable() {
-        // Default state MUST keep classic main screen unchanged (activeConfig == null)
-        val defaultState = ScreenDesignStoreState()
-        assertEquals(ScreenDesignPresets.ID_CLASSIC, defaultState.activeDesignId)
-        assertNull(defaultState.activeConfig)
-        assertTrue(defaultState.savedVersions.isEmpty())
+    fun orderTextSplitter_neverAutoSplitsInWholeModeAndSupportsAllOptionalModes() {
+        val sample = "Milk Bread Eggs Cheese"
+        // Default WHOLE mode keeps text completely intact as 1 item
+        assertEquals(listOf("Milk Bread Eggs Cheese"), OrderTextSplitter.split(sample, OrderTextSplitter.MODE_WHOLE))
 
-        // All 4 approved presets (A, B, C, D) permanently available with distinct modes
-        assertEquals(4, ScreenDesignPresets.fourApprovedPresets.size)
-        assertEquals(5, ScreenDesignPresets.allPresets.size)
-        val codes = ScreenDesignPresets.fourApprovedPresets.map { it.badgeCode }
-        assertEquals(listOf("A", "B", "C", "D"), codes)
+        // 1 word each
+        assertEquals(listOf("Milk", "Bread", "Eggs", "Cheese"), OrderTextSplitter.split(sample, OrderTextSplitter.MODE_WORDS))
 
-        assertEquals("timeline_list", ScreenDesignPresets.optionA.config.layoutMode)
-        assertEquals("gallery_2col", ScreenDesignPresets.optionB.config.layoutMode)
-        assertEquals("spotlight_agenda", ScreenDesignPresets.optionC.config.layoutMode)
-        assertTrue(ScreenDesignPresets.optionC.config.showSpotlightUpNext)
-        assertEquals("bento_grouped", ScreenDesignPresets.optionD.config.layoutMode)
-        assertTrue(ScreenDesignPresets.optionD.config.showRestingGroupSeparate)
+        // 2 words each
+        assertEquals(listOf("Milk Bread", "Eggs Cheese"), OrderTextSplitter.split(sample, OrderTextSplitter.MODE_PAIRS))
 
-        // Customizing a copy of Option B must NOT mutate original Option B
-        val customOptionB = ScreenDesignPresets.optionB.config.copy(
-            taskImageShape = "organic_blob",
-            cardShape = "pill",
-            accentHex = "#8B5CF6",
-            showWeekStrip = true,
-            showFilterChips = false
-        )
-        assertEquals("circle", ScreenDesignPresets.optionB.config.taskImageShape)
-        assertEquals("squircle", ScreenDesignPresets.optionB.config.cardShape)
-        assertTrue(ScreenDesignPresets.optionB.config.showFilterChips)
+        // Custom N words (e.g., 3)
+        assertEquals(listOf("Milk Bread Eggs", "Cheese"), OrderTextSplitter.split(sample, OrderTextSplitter.MODE_CUSTOM_N, wordsPerGroup = 3))
 
-        // Multiple saved custom versions serialize and restore cleanly
-        val savedState = ScreenDesignStoreState(
-            activeDesignId = ScreenDesignPresets.ID_CLASSIC,
-            activeConfig = null,
-            savedVersions = listOf(
-                SavedScreenDesignVersion(
-                    id = "custom_1",
-                    name = "My Organic Option B",
-                    basePresetId = ScreenDesignPresets.ID_OPTION_B,
-                    config = customOptionB
-                ),
-                SavedScreenDesignVersion(
-                    id = "custom_2",
-                    name = "Mint Timeline A",
-                    basePresetId = ScreenDesignPresets.ID_OPTION_A,
-                    config = ScreenDesignPresets.optionA.config.copy(cardElevationDp = 10)
-                )
-            )
-        )
+        // Comma / newline
+        val commaSample = "Apples, Bananas\nOranges، Grapes"
+        assertEquals(listOf("Apples", "Bananas", "Oranges", "Grapes"), OrderTextSplitter.split(commaSample, OrderTextSplitter.MODE_COMMA_LINE))
+
+        // Custom delimiter
+        assertEquals(listOf("Item 1", "Item 2", "Item 3"), OrderTextSplitter.split("Item 1 - Item 2 - Item 3", OrderTextSplitter.MODE_CUSTOM_DELIM, customDelimiter = "-"))
+    }
+
+    @Test
+    fun floatingBadgeCatalog_contains36Pixar3DMaleCharactersAndResolvesAllDrawables() {
+        val pixarChars = FloatingBadgeCatalog.icons.filter { it.categoryId == "pixar_chars" }
+        assertEquals("Expected 36 distinct 3D Pixar male characters", 36, pixarChars.size)
+
+        // Ensure original baby character & existing icons remain preserved
+        assertTrue(FloatingBadgeCatalog.icons.any { it.id == "char_sleeping_zzz" })
+        assertTrue(FloatingBadgeCatalog.icons.size >= 145)
+
+        // Every Pixar 3D character tile URI must resolve to a valid drawable resource and tile 0..8
+        pixarChars.forEach { spec ->
+            assertNotNull("Missing gridTileUri for ${spec.id}", spec.gridTileUri)
+            val parsed = parseBuiltInUri(spec.gridTileUri!!)
+            assertNotNull("Failed to parse URI ${spec.gridTileUri} for ${spec.id}", parsed)
+            val (resId, tileIdx) = parsed!!
+            assertTrue("resId must be non-zero for ${spec.id}", resId != 0)
+            assertNotNull("tileIdx must be non-null for ${spec.id}", tileIdx)
+            assertTrue("tileIdx out of 0..8 for ${spec.id}", tileIdx!! in 0..8)
+        }
+
+        // Verify 3D Pixar Checkmark & X medallion sheet resolves all 9 tiles
+        for (idx in 0..8) {
+            val parsed = parseBuiltInUri("res://img_pixar_check_x_pack#$idx")
+            assertNotNull("Failed to parse check/X pack tile #$idx", parsed)
+            assertTrue(parsed!!.first != 0)
+            assertEquals(idx, parsed.second)
+        }
+
+        // Verify wallpaper catalog & checklist style catalog defaults
+        assertEquals("", UserPreferences().mainWallpaperUri)
+        assertTrue(MainWallpaperCatalog.presets.size >= 8)
+        assertTrue(ChecklistStyleCatalog.styles.size >= 10)
+        assertTrue(ChecklistStyleCatalog.shapes.size >= 6)
+
+        val style = ChecklistStyleConfig(styleId = "pixar_gold", shapeId = "squircle", circleSizeDp = 40, markSizeDp = 22)
         val json = Json { ignoreUnknownKeys = true }
-        val encoded = json.encodeToString(savedState)
-        val decoded = json.decodeFromString<ScreenDesignStoreState>(encoded)
-        assertEquals(savedState, decoded)
-        assertEquals(2, decoded.savedVersions.size)
-        assertEquals("organic_blob", decoded.savedVersions[0].config.taskImageShape)
-        assertEquals(ScreenDesignPresets.ID_CLASSIC, decoded.activeDesignId)
-        assertNull(decoded.activeConfig)
+        assertEquals(style, json.decodeFromString<ChecklistStyleConfig>(json.encodeToString(style)))
     }
 }

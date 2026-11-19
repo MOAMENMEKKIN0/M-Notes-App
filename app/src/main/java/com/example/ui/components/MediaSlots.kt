@@ -156,6 +156,13 @@ private fun builtInDrawableForName(name: String): Int? = when (name) {
     "img_3d_legs_pack" -> R.drawable.img_3d_legs_pack_1795101792103
     "img_3d_abs_core_pack" -> R.drawable.img_3d_abs_core_pack_1795101792740
     "img_3d_shoulders_arms_recovery_pack" -> R.drawable.img_3d_shoulders_arms_recovery_pack_1795101792012
+    // Pixar 3D Male Character Floating Icon Packs (36 distinct characters)
+    "img_pixar_chars_emotions_1" -> R.drawable.img_pixar_chars_emotions_1_1795106628637
+    "img_pixar_chars_fitness_1" -> R.drawable.img_pixar_chars_fitness_1_1795106627995
+    "img_pixar_chars_vibes_1" -> R.drawable.img_pixar_chars_vibes_1_1795106627639
+    "img_pixar_chars_poses_1" -> R.drawable.img_pixar_chars_poses_1_1795106628868
+    // Pixar 3D Glossy Checkmark & X Medallions Pack
+    "img_pixar_check_x_pack" -> R.drawable.img_pixar_check_x_pack_1795106627433
     else -> null
 }
 
@@ -163,6 +170,7 @@ private fun builtInDrawableForName(name: String): Int? = when (name) {
 private fun bottomCaptionTrimFraction(resId: Int): Float = when (resId) {
     R.drawable.img_3d_chest_pack_1795101792319,
     R.drawable.img_3d_legs_pack_1795101792103 -> 0.13f
+    R.drawable.img_pixar_check_x_pack_1795106627433 -> 0.02f
     else -> 0.04f
 }
 

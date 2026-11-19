@@ -70,7 +70,27 @@ fun FloatingBadgeVisual(
         modifier = modifier.size(diameter),
         contentAlignment = Alignment.Center
     ) {
-        if (spec.drawableRes != null) {
+        if (spec.gridTileUri != null) {
+            // Pixar 3D character portrait from 3x3 cached sheet inside crisp white-rimmed circular medallion
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .shadow(shadowElev, CircleShape, clip = false)
+                    .clip(CircleShape)
+                    .background(Color(0xFFE8F7F2))
+                    .border(ringWidth, Color.White, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                MNotesPhotoContent(
+                    imgUri = spec.gridTileUri,
+                    useBannerDefaultIfBlank = false,
+                    contentDescription = contentDescription,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(CircleShape)
+                )
+            }
+        } else if (spec.drawableRes != null) {
             // Exact original circular character style (#E8F7F2 backdrop, crisp white ring, 1:1 circle)
             Box(
                 modifier = Modifier

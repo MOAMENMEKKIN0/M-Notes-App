@@ -196,6 +196,8 @@ data class UserPreferences(
     val reminderBgThemeId: String = "default",
     val reminderDoodlePackId: String = "none",
     val reminderDoodleOpacity: Int = 14,
+    val mainWallpaperUri: String = "",
+    val mainWallpaperDimPercent: Int = 0,
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
 )
@@ -369,7 +371,9 @@ data class BackupPreferencesDto(
     val reqDefaultStampId: String = "paid_thanks",
     val reminderBgThemeId: String = "default",
     val reminderDoodlePackId: String = "none",
-    val reminderDoodleOpacity: Int = 14
+    val reminderDoodleOpacity: Int = 14,
+    val mainWallpaperUri: String = "",
+    val mainWallpaperDimPercent: Int = 0
 )
 
 @Serializable
@@ -381,7 +385,8 @@ data class BackupSnapshotPayload(
     val requests: List<BackupRequestDto> = emptyList(),
     val floatingBadges: List<FloatingBadgeItem> = emptyList(),
     val smartIconSettings: SmartIconSettings = SmartIconSettings(),
-    val screenDesignState: ScreenDesignStoreState = ScreenDesignStoreState()
+    val checklistOrders: List<ChecklistOrderItem> = emptyList(),
+    val checklistStyle: ChecklistStyleConfig = ChecklistStyleConfig()
 )
 
 data class AppThemeSpec(

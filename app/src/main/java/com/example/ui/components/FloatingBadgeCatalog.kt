@@ -119,6 +119,7 @@ data class FloatingBadgeIconSpec(
     val nameAr: String,
     val nameEn: String,
     val drawableRes: Int? = null,
+    val gridTileUri: String? = null,
     val vector: ImageVector? = null,
     val bgTop: Color = Color(0xFFEAFBF4),
     val bgBottom: Color = Color(0xFFC8F1E1),
@@ -131,7 +132,8 @@ object FloatingBadgeCatalog {
 
     val categories: List<FloatingBadgeCategory> = listOf(
         FloatingBadgeCategory("all", "الكل", "All"),
-        FloatingBadgeCategory("character", "الشخصية", "Character"),
+        FloatingBadgeCategory("pixar_chars", "شخصيات 3D", "3D Guys"),
+        FloatingBadgeCategory("character", "الشخصية الأصلية", "Original"),
         FloatingBadgeCategory("sleep", "النوم والراحة", "Sleep"),
         FloatingBadgeCategory("active", "النشاط", "Active"),
         FloatingBadgeCategory("gym", "الجيم", "Gym"),
@@ -234,6 +236,231 @@ object FloatingBadgeCatalog {
             drawableRes = R.drawable.badge_state_focused_1795087011566,
             accentTint = Color(0xFFF59E0B),
             popEffect = BadgePopEffect.STAR_POP
+        ),
+
+        // ==================== 1B. PIXAR 3D MALE CHARACTERS COLLECTION (36) ====================
+        // Emotions Pack (9)
+        FloatingBadgeIconSpec(
+            id = "pixar_guy_happy", categoryId = "pixar_chars",
+            nameAr = "سعيد ومبتسم", nameEn = "Happy Smile",
+            gridTileUri = "res://img_pixar_chars_emotions_1#0",
+            accentTint = Color(0xFF10B981), popEffect = BadgePopEffect.NONE
+        ),
+        FloatingBadgeIconSpec(
+            id = "pixar_guy_laughing", categoryId = "pixar_chars",
+            nameAr = "ضاحك بسعادة", nameEn = "Laughing Guy",
+            gridTileUri = "res://img_pixar_chars_emotions_1#1",
+            accentTint = Color(0xFFF59E0B), popEffect = BadgePopEffect.SPARKLE_POP
+        ),
+        FloatingBadgeIconSpec(
+            id = "pixar_guy_angry", categoryId = "pixar_chars",
+            nameAr = "غاضب ومنفعل", nameEn = "Angry Guy",
+            gridTileUri = "res://img_pixar_chars_emotions_1#2",
+            accentTint = Color(0xFFEF4444), popEffect = BadgePopEffect.NONE
+        ),
+        FloatingBadgeIconSpec(
+            id = "pixar_guy_surprised", categoryId = "pixar_chars",
+            nameAr = "مندهش ومتفاجئ", nameEn = "Surprised Guy",
+            gridTileUri = "res://img_pixar_chars_emotions_1#3",
+            accentTint = Color(0xFFF97316), popEffect = BadgePopEffect.NONE
+        ),
+        FloatingBadgeIconSpec(
+            id = "pixar_guy_sleepy_cap", categoryId = "pixar_chars",
+            nameAr = "نعسان بطاقية نوم", nameEn = "Sleepy Nightcap",
+            gridTileUri = "res://img_pixar_chars_emotions_1#4",
+            accentTint = Color(0xFF3B82F6), popEffect = BadgePopEffect.ZZZ_POP
+        ),
+        FloatingBadgeIconSpec(
+            id = "pixar_guy_sad", categoryId = "pixar_chars",
+            nameAr = "حزين ومتأثر", nameEn = "Sad Guy",
+            gridTileUri = "res://img_pixar_chars_emotions_1#5",
+            accentTint = Color(0xFF6366F1), popEffect = BadgePopEffect.NONE
+        ),
+        FloatingBadgeIconSpec(
+            id = "pixar_guy_cool_shades", categoryId = "pixar_chars",
+            nameAr = "واثق بنظارة شمس", nameEn = "Confident Shades",
+            gridTileUri = "res://img_pixar_chars_emotions_1#6",
+            accentTint = Color(0xFF10B981), popEffect = BadgePopEffect.SPARKLE_POP
+        ),
+        FloatingBadgeIconSpec(
+            id = "pixar_guy_shy_blush", categoryId = "pixar_chars",
+            nameAr = "خجول ومبتسم", nameEn = "Shy Blush",
+            gridTileUri = "res://img_pixar_chars_emotions_1#7",
+            accentTint = Color(0xFFEC4899), popEffect = BadgePopEffect.HEART_POP
+        ),
+        FloatingBadgeIconSpec(
+            id = "pixar_guy_wink_cap", categoryId = "pixar_chars",
+            nameAr = "غامز ومرح", nameEn = "Playful Wink",
+            gridTileUri = "res://img_pixar_chars_emotions_1#8",
+            accentTint = Color(0xFF0EA5E9), popEffect = BadgePopEffect.NONE
+        ),
+
+        // Gym & Energetic Fitness Pack (9)
+        FloatingBadgeIconSpec(
+            id = "pixar_gym_dumbbell", categoryId = "pixar_chars",
+            nameAr = "بطل الدمبل", nameEn = "Dumbbell Champ",
+            gridTileUri = "res://img_pixar_chars_fitness_1#0",
+            accentTint = Color(0xFF2563EB), popEffect = BadgePopEffect.BOLT_POP
+        ),
+        FloatingBadgeIconSpec(
+            id = "pixar_gym_flex", categoryId = "pixar_chars",
+            nameAr = "متحمس وعضلات", nameEn = "Flexing Motivated",
+            gridTileUri = "res://img_pixar_chars_fitness_1#1",
+            accentTint = Color(0xFF10B981), popEffect = BadgePopEffect.NONE
+        ),
+        FloatingBadgeIconSpec(
+            id = "pixar_gym_runner", categoryId = "pixar_chars",
+            nameAr = "عداء كارديو", nameEn = "Cardio Runner",
+            gridTileUri = "res://img_pixar_chars_fitness_1#2",
+            accentTint = Color(0xFFF97316), popEffect = BadgePopEffect.BOLT_POP
+        ),
+        FloatingBadgeIconSpec(
+            id = "pixar_gym_barbell", categoryId = "pixar_chars",
+            nameAr = "رفع البار الثقيل", nameEn = "Barbell Lifter",
+            gridTileUri = "res://img_pixar_chars_fitness_1#3",
+            accentTint = Color(0xFFEF4444), popEffect = BadgePopEffect.FLAME_POP
+        ),
+        FloatingBadgeIconSpec(
+            id = "pixar_gym_victory", categoryId = "pixar_chars",
+            nameAr = "محتفل بالفوز", nameEn = "Victory Celebrate",
+            gridTileUri = "res://img_pixar_chars_fitness_1#4",
+            accentTint = Color(0xFFF59E0B), popEffect = BadgePopEffect.STAR_POP
+        ),
+        FloatingBadgeIconSpec(
+            id = "pixar_gym_shaker", categoryId = "pixar_chars",
+            nameAr = "شيكر البروتين", nameEn = "Protein Shaker",
+            gridTileUri = "res://img_pixar_chars_fitness_1#5",
+            accentTint = Color(0xFF0EA5E9), popEffect = BadgePopEffect.NONE
+        ),
+        FloatingBadgeIconSpec(
+            id = "pixar_gym_focused", categoryId = "pixar_chars",
+            nameAr = "تركيز التمرين", nameEn = "Focused Athlete",
+            gridTileUri = "res://img_pixar_chars_fitness_1#6",
+            accentTint = Color(0xFF14B8A6), popEffect = BadgePopEffect.NONE
+        ),
+        FloatingBadgeIconSpec(
+            id = "pixar_gym_kettlebell", categoryId = "pixar_chars",
+            nameAr = "تمرين كيتل بل", nameEn = "Kettlebell Guy",
+            gridTileUri = "res://img_pixar_chars_fitness_1#7",
+            accentTint = Color(0xFF0D9488), popEffect = BadgePopEffect.NONE
+        ),
+        FloatingBadgeIconSpec(
+            id = "pixar_gym_towel_chill", categoryId = "pixar_chars",
+            nameAr = "راحة بعد التمرين", nameEn = "Post-Workout Chill",
+            gridTileUri = "res://img_pixar_chars_fitness_1#8",
+            accentTint = Color(0xFF10B981), popEffect = BadgePopEffect.CHECK_POP
+        ),
+
+        // Daily Lifestyle & Vibes Pack (9)
+        FloatingBadgeIconSpec(
+            id = "pixar_vibe_coffee", categoryId = "pixar_chars",
+            nameAr = "مزاج القهوة", nameEn = "Coffee Lover",
+            gridTileUri = "res://img_pixar_chars_vibes_1#0",
+            accentTint = Color(0xFFB45309), popEffect = BadgePopEffect.STEAM_POP
+        ),
+        FloatingBadgeIconSpec(
+            id = "pixar_vibe_glasses", categoryId = "pixar_chars",
+            nameAr = "ذكي ومركز", nameEn = "Smart Glasses",
+            gridTileUri = "res://img_pixar_chars_vibes_1#1",
+            accentTint = Color(0xFF2563EB), popEffect = BadgePopEffect.NONE
+        ),
+        FloatingBadgeIconSpec(
+            id = "pixar_vibe_headphones", categoryId = "pixar_chars",
+            nameAr = "رايق بسماعة", nameEn = "Music Headphones",
+            gridTileUri = "res://img_pixar_chars_vibes_1#2",
+            accentTint = Color(0xFF0EA5E9), popEffect = BadgePopEffect.NOTE_POP
+        ),
+        FloatingBadgeIconSpec(
+            id = "pixar_vibe_party", categoryId = "pixar_chars",
+            nameAr = "احتفال وبهجة", nameEn = "Party Confetti",
+            gridTileUri = "res://img_pixar_chars_vibes_1#3",
+            accentTint = Color(0xFFEC4899), popEffect = BadgePopEffect.SPARKLE_POP
+        ),
+        FloatingBadgeIconSpec(
+            id = "pixar_vibe_thumbsup", categoryId = "pixar_chars",
+            nameAr = "ممتاز وبطل", nameEn = "Thumbs Up Pro",
+            gridTileUri = "res://img_pixar_chars_vibes_1#4",
+            accentTint = Color(0xFFF59E0B), popEffect = BadgePopEffect.STAR_POP
+        ),
+        FloatingBadgeIconSpec(
+            id = "pixar_vibe_zen", categoryId = "pixar_chars",
+            nameAr = "هدوء وتأمل", nameEn = "Peaceful Zen",
+            gridTileUri = "res://img_pixar_chars_vibes_1#5",
+            accentTint = Color(0xFF10B981), popEffect = BadgePopEffect.NONE
+        ),
+        FloatingBadgeIconSpec(
+            id = "pixar_vibe_apple", categoryId = "pixar_chars",
+            nameAr = "أكل صحي وتفاحة", nameEn = "Healthy Apple",
+            gridTileUri = "res://img_pixar_chars_vibes_1#6",
+            accentTint = Color(0xFF22C55E), popEffect = BadgePopEffect.NONE
+        ),
+        FloatingBadgeIconSpec(
+            id = "pixar_vibe_hoodie", categoryId = "pixar_chars",
+            nameAr = "روقان الهودي", nameEn = "Cozy Hoodie",
+            gridTileUri = "res://img_pixar_chars_vibes_1#7",
+            accentTint = Color(0xFF14B8A6), popEffect = BadgePopEffect.NONE
+        ),
+        FloatingBadgeIconSpec(
+            id = "pixar_vibe_starry", categoryId = "pixar_chars",
+            nameAr = "طاقة وإلهام", nameEn = "Starry Motivated",
+            gridTileUri = "res://img_pixar_chars_vibes_1#8",
+            accentTint = Color(0xFFF59E0B), popEffect = BadgePopEffect.SPARKLE_POP
+        ),
+
+        // Expressive Poses & Moods Pack (9)
+        FloatingBadgeIconSpec(
+            id = "pixar_pose_cheering", categoryId = "pixar_chars",
+            nameAr = "متحمس بشدة", nameEn = "Super Excited",
+            gridTileUri = "res://img_pixar_chars_poses_1#0",
+            accentTint = Color(0xFFF97316), popEffect = BadgePopEffect.SPARKLE_POP
+        ),
+        FloatingBadgeIconSpec(
+            id = "pixar_pose_tired", categoryId = "pixar_chars",
+            nameAr = "تعبان ومحتاج راحة", nameEn = "Tired Exhausted",
+            gridTileUri = "res://img_pixar_chars_poses_1#1",
+            accentTint = Color(0xFF6366F1), popEffect = BadgePopEffect.NONE
+        ),
+        FloatingBadgeIconSpec(
+            id = "pixar_pose_grumpy", categoryId = "pixar_chars",
+            nameAr = "متضايق ومكشر", nameEn = "Grumpy Pout",
+            gridTileUri = "res://img_pixar_chars_poses_1#2",
+            accentTint = Color(0xFFEF4444), popEffect = BadgePopEffect.NONE
+        ),
+        FloatingBadgeIconSpec(
+            id = "pixar_pose_shocked", categoryId = "pixar_chars",
+            nameAr = "مصدوم ومندهش", nameEn = "Shocked Face",
+            gridTileUri = "res://img_pixar_chars_poses_1#3",
+            accentTint = Color(0xFF0EA5E9), popEffect = BadgePopEffect.NONE
+        ),
+        FloatingBadgeIconSpec(
+            id = "pixar_pose_beard_smile", categoryId = "pixar_chars",
+            nameAr = "بشوش بلحية", nameEn = "Cheerful Beard",
+            gridTileUri = "res://img_pixar_chars_poses_1#4",
+            accentTint = Color(0xFF10B981), popEffect = BadgePopEffect.NONE
+        ),
+        FloatingBadgeIconSpec(
+            id = "pixar_pose_backcap", categoryId = "pixar_chars",
+            nameAr = "كاب رياضي مقلوب", nameEn = "Sporty Cap",
+            gridTileUri = "res://img_pixar_chars_poses_1#5",
+            accentTint = Color(0xFFEF4444), popEffect = BadgePopEffect.NONE
+        ),
+        FloatingBadgeIconSpec(
+            id = "pixar_pose_warrior", categoryId = "pixar_chars",
+            nameAr = "محارب بعصابة رأس", nameEn = "Warrior Mode",
+            gridTileUri = "res://img_pixar_chars_poses_1#6",
+            accentTint = Color(0xFFDC2626), popEffect = BadgePopEffect.FLAME_POP
+        ),
+        FloatingBadgeIconSpec(
+            id = "pixar_pose_cloud_nap", categoryId = "pixar_chars",
+            nameAr = "نايم على سحابة", nameEn = "Cloud Pillow Nap",
+            gridTileUri = "res://img_pixar_chars_poses_1#7",
+            accentTint = Color(0xFF3B82F6), popEffect = BadgePopEffect.ZZZ_POP
+        ),
+        FloatingBadgeIconSpec(
+            id = "pixar_pose_clapping", categoryId = "pixar_chars",
+            nameAr = "يصفق بفرح", nameEn = "Joyful Clapping",
+            gridTileUri = "res://img_pixar_chars_poses_1#8",
+            accentTint = Color(0xFF10B981), popEffect = BadgePopEffect.STAR_POP
         ),
 
         // ==================== 2. SLEEP & REST (12) ====================

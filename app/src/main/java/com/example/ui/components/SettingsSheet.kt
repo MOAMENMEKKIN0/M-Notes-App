@@ -60,6 +60,7 @@ import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material.icons.rounded.TextFields
 import androidx.compose.material.icons.rounded.Upload
 import androidx.compose.material.icons.rounded.VerifiedUser
+import androidx.compose.material.icons.rounded.Wallpaper
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -151,9 +152,6 @@ fun SettingsSheet(
     val connectedEmail by viewModel.connectedEmail.collectAsStateWithLifecycle()
     val floatingBadges by viewModel.floatingBadges.collectAsStateWithLifecycle()
     val smartIconSettings by viewModel.smartIconSettings.collectAsStateWithLifecycle()
-    val screenDesignState by viewModel.screenDesignState.collectAsStateWithLifecycle()
-    val requestsState by viewModel.requestsState.collectAsStateWithLifecycle()
-    val requestsCount = (requestsState as? com.example.ui.UiState.Success)?.data?.size ?: 0
     val lastBackupStatus by viewModel.lastBackupStatus.collectAsStateWithLifecycle()
     val lastBackupError by viewModel.lastBackupError.collectAsStateWithLifecycle()
 
@@ -2099,46 +2097,36 @@ fun SettingsSheet(
                 )
             }
 
-            // 8A. Screen Design Presets & Theme Studio (Options A, B, C, D + Multiple Saved Custom Versions)
+            // 8A. Seamless Full-Screen Main Wallpaper Studio (Own Photo or Soft Pastel Wallpaper)
             SettingsFolder(
                 title = if (lang == "en") {
-                    "Screen Design Themes (Options A, B, C, D)"
+                    "Main Screen Wallpaper"
                 } else {
-                    "قوالب وتصاميم الشاشة (خيارات A, B, C, D)"
+                    "خلفية الشاشة الرئيسية"
                 },
                 subtitle = if (lang == "en") {
-                    "Preview, test, customize shapes/colors/layout & save versions"
+                    "Choose your own photo or seamless full-screen wallpaper"
                 } else {
-                    "معاينة وتخصيص كامل للأشكال والألوان وحفظ عدة نسخ مخصصة"
+                    "اختر صورتك الخاصة أو خلفية متصلة بالكامل بدون خط علوي"
                 },
-                icon = Icons.Rounded.AutoAwesome,
-                isOpen = openFolder == "screenDesigns",
+                icon = Icons.Rounded.Wallpaper,
+                isOpen = openFolder == "mainWallpaper",
                 lang = lang,
                 onToggle = {
                     viewModel.playSound("nav")
-                    openFolder = if (openFolder == "screenDesigns") null else "screenDesigns"
+                    openFolder = if (openFolder == "mainWallpaper") null else "mainWallpaper"
                 }
             ) {
-                ScreenDesignStudio(
-                    designState = screenDesignState,
-                    tasks = tasks,
-                    smartIconSettings = smartIconSettings,
-                    requestsCount = requestsCount,
+                MainWallpaperStudio(
+                    appliedWallpaperUri = prefs.mainWallpaperUri,
+                    appliedDimPercent = prefs.mainWallpaperDimPercent,
                     lang = lang,
-                    onApplyDesign = { designId, config, label ->
-                        viewModel.applyScreenDesign(designId, config, label)
+                    onPickDeviceImage = { uri -> viewModel.importWallpaperFromDevice(uri) },
+                    onApply = { uri, dimPercent ->
+                        viewModel.applyMainWallpaper(uri, dimPercent)
                     },
-                    onSaveCustomVersion = { name, basePresetId, config, overwriteId ->
-                        viewModel.saveCustomDesignVersion(name, basePresetId, config, overwriteId)
-                    },
-                    onDuplicateVersion = { id ->
-                        viewModel.duplicateSavedDesignVersion(id)
-                    },
-                    onRenameVersion = { id, newName ->
-                        viewModel.renameSavedDesignVersion(id, newName)
-                    },
-                    onDeleteVersion = { id ->
-                        viewModel.deleteSavedDesignVersion(id)
+                    onReset = {
+                        viewModel.resetMainWallpaper()
                     }
                 )
             }
@@ -2200,10 +2188,10 @@ fun SettingsSheet(
                 )
             }
 
-            // 11. Dedicated Floating Circular Icon Studio (Interactive Preview + 110+ Icons)
+            // 11. Dedicated Floating Circular Icon Studio (Interactive Preview + 150+ Icons incl. 3D Pixar Characters)
             SettingsFolder(
-                title = if (lang == "en") "Floating Circular Icon & Library" else "الأيقونة الدائرية العائمة (معاينة ومكتبة 110+ أيقونة)",
-                subtitle = if (lang == "en") "Interactive drag preview, live resize, 110+ icons & copies" else "معاينة تفاعلية بالسحب، تغيير حجم فوري، مكتبة 110+ أيقونة",
+                title = if (lang == "en") "Floating Circular Icon & 3D Library" else "الأيقونة الدائرية العائمة (مكتبة 150+ أيقونة وشخصيات 3D)",
+                subtitle = if (lang == "en") "36 Pixar 3D characters, baby icons, live resize, drag & save" else "36 شخصية 3D Pixar جديدة + أيقونات الطفل + سحب وحفظ فوري",
                 icon = Icons.Rounded.Mood,
                 isOpen = openFolder == "characterBadge",
                 lang = lang,

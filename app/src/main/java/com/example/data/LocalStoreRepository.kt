@@ -9,10 +9,11 @@ import com.example.model.BackupPreferencesDto
 import com.example.model.BackupRequestDto
 import com.example.model.BackupSnapshotPayload
 import com.example.model.BackupTaskDto
+import com.example.model.ChecklistOrderItem
+import com.example.model.ChecklistStyleConfig
 import com.example.model.FloatingBadgeItem
 import com.example.model.QuickRequest
 import com.example.model.RepeatMode
-import com.example.model.ScreenDesignStoreState
 import com.example.model.SmartIconSettings
 import com.example.model.SmartTask
 import com.example.model.UserPreferences
@@ -82,7 +83,8 @@ private data class LocalWorkspaceState(
     val floatingBadgesInitialized: Boolean = false,
     val floatingBadges: List<FloatingBadgeItem> = emptyList(),
     val smartIconSettings: SmartIconSettings = SmartIconSettings(),
-    val screenDesignState: ScreenDesignStoreState = ScreenDesignStoreState()
+    val checklistOrders: List<ChecklistOrderItem> = emptyList(),
+    val checklistStyle: ChecklistStyleConfig = ChecklistStyleConfig()
 )
 
 class LocalStoreRepository(private val context: Context) {
@@ -168,7 +170,9 @@ class LocalStoreRepository(private val context: Context) {
             reqDefaultStampId = p.reqDefaultStampId,
             reminderBgThemeId = p.reminderBgThemeId,
             reminderDoodlePackId = p.reminderDoodlePackId,
-            reminderDoodleOpacity = p.reminderDoodleOpacity
+            reminderDoodleOpacity = p.reminderDoodleOpacity,
+            mainWallpaperUri = p.mainWallpaperUri,
+            mainWallpaperDimPercent = p.mainWallpaperDimPercent
         )
     }
 
@@ -235,13 +239,23 @@ class LocalStoreRepository(private val context: Context) {
         state.smartIconSettings
     }
 
-    val screenDesignStateFlow: Flow<ScreenDesignStoreState> = stateFlow.map { state ->
-        state.screenDesignState
+    val checklistOrdersFlow: Flow<List<ChecklistOrderItem>> = stateFlow.map { state ->
+        state.checklistOrders.sortedBy { it.sortOrder }
+    }
+
+    val checklistStyleFlow: Flow<ChecklistStyleConfig> = stateFlow.map { state ->
+        state.checklistStyle
     }
 
     suspend fun getTasksSnapshot(): List<SmartTask> = tasksFlow.first()
 
     suspend fun getPreferencesSnapshot(): UserPreferences = preferencesFlow.first()
+
+    suspend fun getFloatingBadgesSnapshot(): List<FloatingBadgeItem> = floatingBadgesFlow.first()
+
+    suspend fun getChecklistOrdersSnapshot(): List<ChecklistOrderItem> = checklistOrdersFlow.first()
+
+    suspend fun getChecklistStyleSnapshot(): ChecklistStyleConfig = checklistStyleFlow.first()
 
     suspend fun ensureInitialized(): Result<Unit> = runWorkspaceEdit { state ->
         val defaultBadge = FloatingBadgeItem(
@@ -409,6 +423,10 @@ class LocalStoreRepository(private val context: Context) {
                 "reminderDoodlePackId" -> (v as? String)?.let { p = p.copy(reminderDoodlePackId = it.take(40)) }
                 "reminderDoodleOpacity" -> (v as? Number)?.toInt()?.let {
                     p = p.copy(reminderDoodleOpacity = it.coerceIn(6, 30))
+                }
+                "mainWallpaperUri" -> (v as? String)?.let { p = p.copy(mainWallpaperUri = it.take(2000)) }
+                "mainWallpaperDimPercent" -> (v as? Number)?.toInt()?.let {
+                    p = p.copy(mainWallpaperDimPercent = it.coerceIn(0, 45))
                 }
             }
         }
@@ -736,8 +754,24 @@ class LocalStoreRepository(private val context: Context) {
         )
     }
 
-    suspend fun saveScreenDesignState(designState: ScreenDesignStoreState): Result<Unit> = runWorkspaceEdit { state ->
-        state.copy(screenDesignState = designState)
+    suspend fun saveChecklistOrders(items: List<ChecklistOrderItem>): Result<Unit> = runWorkspaceEdit { state ->
+        val normalized = items.mapIndexed { idx, item ->
+            item.copy(
+                text = item.text.trim().take(500),
+                status = if (item.status in setOf(ChecklistOrderItem.STATUS_CHECK, ChecklistOrderItem.STATUS_X)) item.status else ChecklistOrderItem.STATUS_NONE,
+                sortOrder = idx.toLong()
+            )
+        }.filter { it.text.isNotEmpty() }
+        state.copy(initialized = true, checklistOrders = normalized)
+    }
+
+    suspend fun saveChecklistStyle(style: ChecklistStyleConfig): Result<Unit> = runWorkspaceEdit { state ->
+        val normalized = style.copy(
+            circleSizeDp = style.circleSizeDp.coerceIn(22, 52),
+            markSizeDp = style.markSizeDp.coerceIn(10, 34),
+            itemSpacingDp = style.itemSpacingDp.coerceIn(4, 22)
+        )
+        state.copy(initialized = true, checklistStyle = normalized)
     }
 
     suspend fun restoreFromSnapshot(snapshot: BackupSnapshotPayload): Result<Unit> = runWorkspaceEdit { state ->
@@ -760,7 +794,9 @@ class LocalStoreRepository(private val context: Context) {
             cardScalePercent = p.cardScalePercent.coerceIn(80, 160),
             reminderBgThemeId = p.reminderBgThemeId.ifBlank { "default" }.take(40),
             reminderDoodlePackId = p.reminderDoodlePackId.ifBlank { "none" }.take(40),
-            reminderDoodleOpacity = p.reminderDoodleOpacity.coerceIn(6, 30)
+            reminderDoodleOpacity = p.reminderDoodleOpacity.coerceIn(6, 30),
+            mainWallpaperUri = p.mainWallpaperUri.take(2000),
+            mainWallpaperDimPercent = p.mainWallpaperDimPercent.coerceIn(0, 45)
         )
         val restoredTasks = snapshot.tasks.mapIndexed { idx, t: BackupTaskDto ->
             LocalTaskDto(
@@ -825,7 +861,8 @@ class LocalStoreRepository(private val context: Context) {
                 state.floatingBadges
             },
             smartIconSettings = snapshot.smartIconSettings,
-            screenDesignState = snapshot.screenDesignState
+            checklistOrders = snapshot.checklistOrders,
+            checklistStyle = snapshot.checklistStyle
         )
     }
 

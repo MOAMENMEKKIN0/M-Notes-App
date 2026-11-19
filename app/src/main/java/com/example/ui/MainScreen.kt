@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -31,19 +32,24 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -51,7 +57,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -62,18 +67,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.localization.AppStrings
-import com.example.model.ScreenDesignPresets
 import com.example.model.SmartTask
 import com.example.notification.TaskAlarmScheduler
 import com.example.ui.components.AlertOverlay
-import com.example.ui.components.CustomScreenThemeWorkspace
 import com.example.ui.components.FloatingBadgeLibrarySheet
 import com.example.ui.components.FloatingCharacterBadgesOverlay
 import com.example.ui.components.HomeQuickOverviewSheet
+import com.example.ui.components.MainScreenWallpaperBackdrop
 import com.example.ui.components.PhotoCropSheet
 import com.example.ui.components.PhotoPickerSheet
 import com.example.ui.components.RequestsWorkspace
-import com.example.ui.components.ScreenDesignBackdrop
 import com.example.ui.components.SettingsSheet
 import com.example.ui.components.TaskBadgeLibrarySheet
 import com.example.ui.components.TaskEditorSheet
@@ -111,15 +114,6 @@ fun MainScreen(viewModel: MNotesViewModel) {
     val isBusyBackup by viewModel.isBusyBackup.collectAsStateWithLifecycle()
     val floatingBadges by viewModel.floatingBadges.collectAsStateWithLifecycle()
     val smartIconSettings by viewModel.smartIconSettings.collectAsStateWithLifecycle()
-    val screenDesignState by viewModel.screenDesignState.collectAsStateWithLifecycle()
-
-    val activeScreenDesignConfig = remember(screenDesignState) {
-        if (screenDesignState.activeDesignId == ScreenDesignPresets.ID_CLASSIC) {
-            null
-        } else {
-            screenDesignState.activeConfig
-        }
-    }
 
     val context = LocalContext.current
     val colors = LocalMNotesColors.current
@@ -127,18 +121,28 @@ fun MainScreen(viewModel: MNotesViewModel) {
     val lang = prefs.lang
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+    var notifCheckTick by remember { mutableIntStateOf(0) }
+    var notifBannerDismissed by remember { mutableStateOf(false) }
 
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
+        notifCheckTick++
         if (!granted) {
-            viewModel.showMessage(
-                if (lang == "en") {
-                    "Enable notifications in Settings so reminders work when the app is closed."
-                } else {
-                    "فعّل إذن الإشعارات من الإعدادات لكي تصلك التذكيرات عند إغلاق التطبيق وقفل الشاشة."
+            scope.launch {
+                val res = snackbarHostState.showSnackbar(
+                    message = if (lang == "en") {
+                        "Enable notifications in system settings so reminders work when the app is closed."
+                    } else {
+                        "فعّل إذن الإشعارات من إعدادات الهاتف لكي تصلك التذكيرات عند إغلاق التطبيق وقفل الشاشة."
+                    },
+                    actionLabel = if (lang == "en") "Open Settings" else "فتح الإعدادات",
+                    duration = SnackbarDuration.Long
+                )
+                if (res == SnackbarResult.ActionPerformed) {
+                    TaskAlarmScheduler.openNotificationSettings(context)
                 }
-            )
+            }
         }
     }
 
@@ -195,33 +199,23 @@ fun MainScreen(viewModel: MNotesViewModel) {
     val layoutDir = if (lang == "ar") LayoutDirection.Rtl else LayoutDirection.Ltr
     CompositionLocalProvider(LocalLayoutDirection provides layoutDir) {
         Box(modifier = Modifier.fillMaxSize()) {
-            if (activeScreenDesignConfig != null) {
-                ScreenDesignBackdrop(
-                    config = activeScreenDesignConfig,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
+            // Seamless, continuous full-screen wallpaper covering behind status bar, top bar, body, and nav bar
+            // with ZERO visible dividing line or separate top strip.
+            MainScreenWallpaperBackdrop(
+                wallpaperUri = prefs.mainWallpaperUri,
+                dimPercent = prefs.mainWallpaperDimPercent,
+                modifier = Modifier.fillMaxSize()
+            )
+
             Scaffold(
                 containerColor = Color.Transparent,
+                contentWindowInsets = WindowInsets(0, 0, 0, 0),
                 snackbarHost = { SnackbarHost(snackbarHostState) },
-                modifier = Modifier
-                    .fillMaxSize()
-                    .then(
-                        if (activeScreenDesignConfig == null) {
-                            Modifier.background(
-                                Brush.verticalGradient(
-                                    colors = listOf(colors.bgTopGlow, colors.bgMain, colors.bgMain)
-                                )
-                            )
-                        } else {
-                            Modifier
-                        }
-                    )
-            ) { innerPadding ->
+                modifier = Modifier.fillMaxSize()
+            ) { _ ->
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(innerPadding)
                         .statusBarsPadding()
                         .navigationBarsPadding(),
                     horizontalAlignment = Alignment.CenterHorizontally
@@ -335,146 +329,162 @@ fun MainScreen(viewModel: MNotesViewModel) {
                             )
                         }
 
+                        // Actionable Notification / Exact Alarm readiness strip ONLY when reminders exist & OS permission is missing
+                        val hasScheduledReminders = remember(allTasks) {
+                            allTasks.any { it.alertEnabled && it.alertTime.isNotBlank() }
+                        }
+                        val notifDiag = remember(hasScheduledReminders, notifCheckTick, showSettings) {
+                            TaskAlarmScheduler.diagnose(context)
+                        }
+                        val needsOsAlertSetup = hasScheduledReminders && !notifBannerDismissed &&
+                            (!notifDiag.hasNotificationPermission || !notifDiag.areNotificationsEnabled || !notifDiag.canScheduleExactAlarms)
+                        if (needsOsAlertSetup) {
+                            Spacer(Modifier.height(8.dp))
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = Color(0xFFFFFBEB),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .border(1.dp, Color(0xFFF59E0B).copy(alpha = 0.45f), RoundedCornerShape(14.dp))
+                                    .testTag("notification_permission_banner")
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 10.dp, vertical = 7.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.NotificationsActive,
+                                        contentDescription = null,
+                                        tint = Color(0xFFD97706),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Text(
+                                        text = when {
+                                            !notifDiag.hasNotificationPermission || !notifDiag.areNotificationsEnabled ->
+                                                if (lang == "en") "Allow Notifications for reminders" else "فعّل الإشعارات لعمل التذكيرات"
+                                            else ->
+                                                if (lang == "en") "Allow Exact Alarms for on-time alerts" else "فعّل المنبهات الدقيقة للتذكير بالثانية"
+                                        },
+                                        color = Color(0xFF92400E),
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(999.dp))
+                                            .background(Color(0xFFD97706))
+                                            .clickable {
+                                                when {
+                                                    !notifDiag.hasNotificationPermission && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU ->
+                                                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                                    !notifDiag.areNotificationsEnabled ->
+                                                        TaskAlarmScheduler.openNotificationSettings(context)
+                                                    else ->
+                                                        TaskAlarmScheduler.openExactAlarmSettings(context)
+                                                }
+                                                notifCheckTick++
+                                            }
+                                            .padding(horizontal = 10.dp, vertical = 5.dp)
+                                            .testTag("notification_permission_fix_btn")
+                                    ) {
+                                        Text(
+                                            text = if (lang == "en") "Enable" else "تفعيل",
+                                            color = Color.White,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.ExtraBold
+                                        )
+                                    }
+                                    Icon(
+                                        imageVector = Icons.Rounded.Close,
+                                        contentDescription = if (lang == "en") "Dismiss" else "إخفاء",
+                                        tint = Color(0xFF92400E),
+                                        modifier = Modifier
+                                            .size(18.dp)
+                                            .clickable { notifBannerDismissed = true }
+                                    )
+                                }
+                            }
+                        }
+
                         Spacer(Modifier.height(12.dp))
 
-                        // Two-page Swipeable Workspace
+                        // Two-page Swipeable Workspace (Original Main Screen unconditionally restored!)
                         HorizontalPager(
                             state = pagerState,
                             userScrollEnabled = prefs.swipePages,
                             modifier = Modifier.weight(1f)
                         ) { page ->
                             if (page == 0) {
-                                if (activeScreenDesignConfig != null) {
-                                    CustomScreenThemeWorkspace(
-                                        config = activeScreenDesignConfig,
-                                        allTasks = allTasks,
-                                        smartIconSettings = smartIconSettings,
-                                        requestsCount = allRequests.size,
-                                        lang = lang,
-                                        searchQuery = searchQuery,
-                                        onSearchChange = { viewModel.setSearchQuery(it) },
-                                        onAddTaskClick = {
-                                            viewModel.playSound("enter")
-                                            editingTask = null
-                                            editorDraftImgUri = ""
-                                            showTaskEditor = true
-                                        },
-                                        onTaskPhotoClick = { taskId ->
-                                            viewModel.playSound("enter")
-                                            photoPickTarget = PhotoPickTarget.Task(taskId)
-                                        },
-                                        onTaskEditClick = { task ->
-                                            viewModel.playSound("enter")
-                                            editingTask = task
-                                            editorDraftImgUri = task.imgUri
-                                            showTaskEditor = true
-                                        },
-                                        onTaskDeleteClick = { taskId ->
-                                            viewModel.deleteTask(taskId)
-                                        },
-                                        onTaskBadgeTap = { tappedTask ->
-                                            viewModel.playSound("enter")
-                                            taskBadgeLibraryTaskId = tappedTask.id
-                                        },
-                                        onTaskBadgeDrag = { taskId, offsetX, offsetY ->
-                                            viewModel.updateTaskBadgePosition(taskId, offsetX, offsetY)
-                                        },
-                                        onPreviewTaskAlert = { task ->
-                                            viewModel.showAlert(task, previewOnly = true)
-                                        },
-                                        onOpenOverview = { dayIdx ->
-                                            viewModel.playSound("enter")
-                                            overviewDayFilter = dayIdx
-                                            showHomeOverview = true
-                                        },
-                                        onOpenRequestsPage = {
-                                            viewModel.playSound("nav")
-                                            scope.launch {
-                                                pagerState.animateScrollToPage(
-                                                    page = 1,
-                                                    animationSpec = spring(
-                                                        dampingRatio = Spring.DampingRatioNoBouncy,
-                                                        stiffness = motionStiffnessForHz(prefs.refreshRateHz)
-                                                    )
+                                TasksWorkspaceRouter(
+                                    prefs = prefs,
+                                    allTasks = allTasks,
+                                    smartIconSettings = smartIconSettings,
+                                    requestsCount = allRequests.size,
+                                    tasksState = tasksState,
+                                    searchQuery = searchQuery,
+                                    onSearchChange = { viewModel.setSearchQuery(it) },
+                                    onBannerPhotoClick = {
+                                        viewModel.playSound("enter")
+                                        photoPickTarget = PhotoPickTarget.Banner
+                                    },
+                                    onBannerBodyClick = {
+                                        viewModel.playSound("enter")
+                                        initialSettingsFolder = "homeLayout"
+                                        showSettings = true
+                                    },
+                                    onAddTaskClick = {
+                                        viewModel.playSound("enter")
+                                        editingTask = null
+                                        editorDraftImgUri = ""
+                                        showTaskEditor = true
+                                    },
+                                    onTaskPhotoClick = { taskId ->
+                                        viewModel.playSound("enter")
+                                        photoPickTarget = PhotoPickTarget.Task(taskId)
+                                    },
+                                    onTaskEditClick = { task ->
+                                        viewModel.playSound("enter")
+                                        editingTask = task
+                                        editorDraftImgUri = task.imgUri
+                                        showTaskEditor = true
+                                    },
+                                    onTaskDeleteClick = { taskId ->
+                                        viewModel.deleteTask(taskId)
+                                    },
+                                    onTaskBadgeTap = { tappedTask ->
+                                        viewModel.playSound("enter")
+                                        taskBadgeLibraryTaskId = tappedTask.id
+                                    },
+                                    onTaskBadgeDrag = { taskId, offsetX, offsetY ->
+                                        viewModel.updateTaskBadgePosition(taskId, offsetX, offsetY)
+                                    },
+                                    onPreviewTaskAlert = { task ->
+                                        viewModel.showAlert(task, previewOnly = true)
+                                    },
+                                    onOpenOverview = { dayIdx ->
+                                        viewModel.playSound("enter")
+                                        overviewDayFilter = dayIdx
+                                        showHomeOverview = true
+                                    },
+                                    onOpenRequestsPage = {
+                                        viewModel.playSound("nav")
+                                        scope.launch {
+                                            pagerState.animateScrollToPage(
+                                                page = 1,
+                                                animationSpec = spring(
+                                                    dampingRatio = Spring.DampingRatioNoBouncy,
+                                                    stiffness = motionStiffnessForHz(prefs.refreshRateHz)
                                                 )
-                                            }
-                                        },
-                                        onOpenSettings = {
-                                            viewModel.playSound("enter")
-                                            initialSettingsFolder = "screenDesigns"
-                                            showSettings = true
-                                        },
-                                        isPreview = false,
-                                        modifier = Modifier.fillMaxSize()
-                                    )
-                                } else {
-                                    TasksWorkspaceRouter(
-                                        prefs = prefs,
-                                        allTasks = allTasks,
-                                        smartIconSettings = smartIconSettings,
-                                        requestsCount = allRequests.size,
-                                        tasksState = tasksState,
-                                        searchQuery = searchQuery,
-                                        onSearchChange = { viewModel.setSearchQuery(it) },
-                                        onBannerPhotoClick = {
-                                            viewModel.playSound("enter")
-                                            photoPickTarget = PhotoPickTarget.Banner
-                                        },
-                                        onBannerBodyClick = {
-                                            viewModel.playSound("enter")
-                                            initialSettingsFolder = "homeLayout"
-                                            showSettings = true
-                                        },
-                                        onAddTaskClick = {
-                                            viewModel.playSound("enter")
-                                            editingTask = null
-                                            editorDraftImgUri = ""
-                                            showTaskEditor = true
-                                        },
-                                        onTaskPhotoClick = { taskId ->
-                                            viewModel.playSound("enter")
-                                            photoPickTarget = PhotoPickTarget.Task(taskId)
-                                        },
-                                        onTaskEditClick = { task ->
-                                            viewModel.playSound("enter")
-                                            editingTask = task
-                                            editorDraftImgUri = task.imgUri
-                                            showTaskEditor = true
-                                        },
-                                        onTaskDeleteClick = { taskId ->
-                                            viewModel.deleteTask(taskId)
-                                        },
-                                        onTaskBadgeTap = { tappedTask ->
-                                            viewModel.playSound("enter")
-                                            taskBadgeLibraryTaskId = tappedTask.id
-                                        },
-                                        onTaskBadgeDrag = { taskId, offsetX, offsetY ->
-                                            viewModel.updateTaskBadgePosition(taskId, offsetX, offsetY)
-                                        },
-                                        onPreviewTaskAlert = { task ->
-                                            viewModel.showAlert(task, previewOnly = true)
-                                        },
-                                        onOpenOverview = { dayIdx ->
-                                            viewModel.playSound("enter")
-                                            overviewDayFilter = dayIdx
-                                            showHomeOverview = true
-                                        },
-                                        onOpenRequestsPage = {
-                                            viewModel.playSound("nav")
-                                            scope.launch {
-                                                pagerState.animateScrollToPage(
-                                                    page = 1,
-                                                    animationSpec = spring(
-                                                        dampingRatio = Spring.DampingRatioNoBouncy,
-                                                        stiffness = motionStiffnessForHz(prefs.refreshRateHz)
-                                                    )
-                                                )
-                                            }
+                                            )
                                         }
-                                    )
-                                }
+                                    }
+                                )
                             } else {
-                                // Page 1: Rich Requests, Invoices, Cheques, Cards & Orders
+                                // Page 1: Clean Blank Customizable Orders / Checklist Page
                                 RequestsWorkspace(
                                     prefs = prefs,
                                     allRequests = allRequests,
@@ -502,7 +512,7 @@ fun MainScreen(viewModel: MNotesViewModel) {
                 onUpdatePosition = { id, x, y -> viewModel.updateFloatingBadgePosition(id, x, y) }
             )
 
-            // Dedicated 110+ Icon Selection Library Sheet (opened ONLY by tapping a small floating icon)
+            // Dedicated 150+ Icon Selection Library Sheet with explicit OK / Save & Apply button
             val activeLibraryBadge = libraryTargetBadgeId?.let { targetId ->
                 floatingBadges.firstOrNull { it.id == targetId }
             }
@@ -510,18 +520,17 @@ fun MainScreen(viewModel: MNotesViewModel) {
                 FloatingBadgeLibrarySheet(
                     badge = activeLibraryBadge,
                     lang = lang,
-                    onSelectIcon = { iconId ->
-                        viewModel.updateFloatingBadgeState(activeLibraryBadge.id, iconId)
-                    },
-                    onUpdateSize = { newSize ->
-                        viewModel.updateFloatingBadgeSize(activeLibraryBadge.id, newSize)
+                    onConfirmSave = { iconId, sizeDp, locked ->
+                        viewModel.confirmSaveFloatingBadgeChanges(
+                            badgeId = activeLibraryBadge.id,
+                            stateId = iconId,
+                            sizeDp = sizeDp,
+                            locked = locked
+                        )
                     },
                     onDuplicate = {
                         val dupId = viewModel.duplicateFloatingBadge(activeLibraryBadge.id)
                         if (dupId != null) libraryTargetBadgeId = dupId
-                    },
-                    onToggleLock = {
-                        viewModel.toggleFloatingBadgeLock(activeLibraryBadge.id)
                     },
                     onHide = {
                         viewModel.toggleFloatingBadgeVisibility(activeLibraryBadge.id)
@@ -601,11 +610,46 @@ fun MainScreen(viewModel: MNotesViewModel) {
                         editorDraftImgUri = path
                     },
                     onSave = { title, meta, startDate, alertTime, repeatMode, cycleRaw, weekDays, alertEnabled, imgUri, ringId, testAlert, badgeIconId, badgeVisible, badgeSizeDp, badgeCategory, badgeSmartMode ->
-                        if (alertEnabled && alertTime.isNotBlank() &&
-                            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                            !TaskAlarmScheduler.hasNotificationPermission(context)
-                        ) {
-                            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        if (alertEnabled && alertTime.isNotBlank()) {
+                            val diag = TaskAlarmScheduler.diagnose(context)
+                            notifCheckTick++
+                            when {
+                                !diag.hasNotificationPermission && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU -> {
+                                    notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                }
+                                !diag.areNotificationsEnabled -> {
+                                    scope.launch {
+                                        val res = snackbarHostState.showSnackbar(
+                                            message = if (lang == "en") {
+                                                "Notifications are turned off for M Notes."
+                                            } else {
+                                                "الإشعارات متوقفة للتطبيق في إعدادات الهاتف."
+                                            },
+                                            actionLabel = if (lang == "en") "Enable" else "تفعيل",
+                                            duration = SnackbarDuration.Long
+                                        )
+                                        if (res == SnackbarResult.ActionPerformed) {
+                                            TaskAlarmScheduler.openNotificationSettings(context)
+                                        }
+                                    }
+                                }
+                                !diag.canScheduleExactAlarms -> {
+                                    scope.launch {
+                                        val res = snackbarHostState.showSnackbar(
+                                            message = if (lang == "en") {
+                                                "Allow Exact Alarms so reminders fire right on time."
+                                            } else {
+                                                "فعّل إذن المنبهات الدقيقة لكي يعمل التذكير في وقته بالثانية."
+                                            },
+                                            actionLabel = if (lang == "en") "Allow" else "السماح",
+                                            duration = SnackbarDuration.Long
+                                        )
+                                        if (res == SnackbarResult.ActionPerformed) {
+                                            TaskAlarmScheduler.openExactAlarmSettings(context)
+                                        }
+                                    }
+                                }
+                            }
                         }
                         viewModel.saveTask(
                             editingTask = editingTask,

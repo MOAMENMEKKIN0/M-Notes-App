@@ -84,6 +84,40 @@ class LocalMediaRepository(private val context: Context) {
         }
     }
 
+    /**
+     * Copies a user-picked wallpaper image into private app storage (downscaled cleanly to <= 1600px)
+     * so it persists permanently across app restarts without relying on temporary content URI grants.
+     */
+    suspend fun saveWallpaperImage(sourceUri: Uri): Result<String> = withContext(Dispatchers.IO) {
+        runCatching {
+            val boundsOpts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            context.contentResolver.openInputStream(sourceUri)?.use {
+                BitmapFactory.decodeStream(it, null, boundsOpts)
+            } ?: error("Cannot open wallpaper image URI")
+
+            val maxDim = maxOf(boundsOpts.outWidth, boundsOpts.outHeight).coerceAtLeast(1)
+            var sampleSize = 1
+            while (maxDim / sampleSize > 1600) {
+                sampleSize *= 2
+            }
+            val decodeOpts = BitmapFactory.Options().apply {
+                inSampleSize = sampleSize
+                inPreferredConfig = Bitmap.Config.ARGB_8888
+            }
+            val decoded = context.contentResolver.openInputStream(sourceUri)?.use {
+                BitmapFactory.decodeStream(it, null, decodeOpts)
+            } ?: error("Failed to decode wallpaper image")
+
+            val dir = File(context.filesDir, "mnotes_wallpapers").apply { mkdirs() }
+            val outFile = File(dir, "wallpaper_${System.currentTimeMillis()}.jpg")
+            FileOutputStream(outFile).use { fos ->
+                decoded.compress(Bitmap.CompressFormat.JPEG, 90, fos)
+            }
+            decoded.recycle()
+            outFile.absolutePath
+        }
+    }
+
     suspend fun addLibraryPhoto(name: String, filePath: String) {
         context.mediaDataStore.edit { prefs ->
             val current = runCatching {

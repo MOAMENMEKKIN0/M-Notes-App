@@ -13,18 +13,17 @@ import com.example.model.BackupPreferencesDto
 import com.example.model.BackupRequestDto
 import com.example.model.BackupSnapshotPayload
 import com.example.model.BackupTaskDto
+import com.example.model.ChecklistOrderItem
+import com.example.model.ChecklistStyleConfig
 import com.example.model.FloatingBadgeItem
 import com.example.model.LibraryPhoto
 import com.example.model.QuickRequest
 import com.example.model.RepeatMode
-import com.example.model.SavedScreenDesignVersion
-import com.example.model.ScreenDesignConfig
-import com.example.model.ScreenDesignPresets
-import com.example.model.ScreenDesignStoreState
 import com.example.model.SmartIconSettings
 import com.example.model.SmartTask
 import com.example.model.TrimmedRingtone
 import com.example.model.UserPreferences
+import java.util.concurrent.atomic.AtomicInteger
 import com.example.notification.TaskAlarmScheduler
 import com.example.util.LauncherIconManager
 import com.google.firebase.Firebase
@@ -94,8 +93,7 @@ class MNotesViewModel(
     private val _tasksState = MutableStateFlow<UiState<List<SmartTask>>>(UiState.Loading)
     val tasksState: StateFlow<UiState<List<SmartTask>>> = _tasksState.asStateFlow()
 
-    @Volatile
-    private var lastTaskMutationAtMs: Long = 0L
+    private val inFlightTaskWrites = AtomicInteger(0)
 
     val requestsState: StateFlow<UiState<List<QuickRequest>>> = localStore.requestsFlow
         .map<List<QuickRequest>, UiState<List<QuickRequest>>> { UiState.Success(it) }
@@ -121,18 +119,17 @@ class MNotesViewModel(
     private val _smartIconSettings = MutableStateFlow(SmartIconSettings())
     val smartIconSettings: StateFlow<SmartIconSettings> = _smartIconSettings.asStateFlow()
 
-    private val _screenDesignState = MutableStateFlow(ScreenDesignStoreState())
-    val screenDesignState: StateFlow<ScreenDesignStoreState> = _screenDesignState.asStateFlow()
+    private val _checklistOrders = MutableStateFlow<List<ChecklistOrderItem>>(emptyList())
+    val checklistOrders: StateFlow<List<ChecklistOrderItem>> = _checklistOrders.asStateFlow()
 
-    private var badgePersistJob: Job? = null
-    private var taskBadgeDragPersistJob: Job? = null
+    private val _checklistStyle = MutableStateFlow(ChecklistStyleConfig())
+    val checklistStyle: StateFlow<ChecklistStyleConfig> = _checklistStyle.asStateFlow()
+
+    private val inFlightBadgeWrites = AtomicInteger(0)
+    private val inFlightChecklistWrites = AtomicInteger(0)
     private var autoBackupDebounceJob: Job? = null
     @Volatile
-    private var lastBadgeMutationAtMs: Long = 0L
-    @Volatile
     private var lastSmartSettingsMutationAtMs: Long = 0L
-    @Volatile
-    private var lastScreenDesignMutationAtMs: Long = 0L
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
@@ -167,8 +164,7 @@ class MNotesViewModel(
                     _tasksState.value = UiState.Error(error.message ?: "Failed to load tasks")
                 }
                 .collect { stored ->
-                    val now = System.currentTimeMillis()
-                    if (now - lastTaskMutationAtMs > 280L || _tasksState.value !is UiState.Success) {
+                    if (inFlightTaskWrites.get() == 0 || _tasksState.value !is UiState.Success) {
                         _tasksState.value = UiState.Success(stored)
                     }
                     syncAllAlarms(stored)
@@ -176,9 +172,7 @@ class MNotesViewModel(
         }
         viewModelScope.launch {
             localStore.floatingBadgesFlow.collect { stored ->
-                // Avoid clobbering active 120Hz drags/slider ticks with stale DataStore emissions
-                val now = System.currentTimeMillis()
-                if (now - lastBadgeMutationAtMs > 450L || _floatingBadges.value.isEmpty()) {
+                if (inFlightBadgeWrites.get() == 0 || _floatingBadges.value.isEmpty()) {
                     _floatingBadges.value = stored
                 }
             }
@@ -192,11 +186,15 @@ class MNotesViewModel(
             }
         }
         viewModelScope.launch {
-            localStore.screenDesignStateFlow.collect { stored ->
-                val now = System.currentTimeMillis()
-                if (now - lastScreenDesignMutationAtMs > 350L) {
-                    _screenDesignState.value = stored
+            localStore.checklistOrdersFlow.collect { stored ->
+                if (inFlightChecklistWrites.get() == 0) {
+                    _checklistOrders.value = stored
                 }
+            }
+        }
+        viewModelScope.launch {
+            localStore.checklistStyleFlow.collect { stored ->
+                _checklistStyle.value = stored
             }
         }
     }
@@ -209,9 +207,30 @@ class MNotesViewModel(
     private fun applyOptimisticTasks(transform: (List<SmartTask>) -> List<SmartTask>) {
         val current = (_tasksState.value as? UiState.Success)?.data ?: return
         val updated = transform(current)
-        lastTaskMutationAtMs = System.currentTimeMillis()
         _tasksState.value = UiState.Success(updated)
         syncAllAlarms(updated)
+    }
+
+    private fun persistTaskMutation(
+        optimisticTransform: (List<SmartTask>) -> List<SmartTask>,
+        persistBlock: suspend () -> Result<Unit>,
+        onSuccess: (() -> Unit)? = null
+    ) {
+        applyOptimisticTasks(optimisticTransform)
+        inFlightTaskWrites.incrementAndGet()
+        viewModelScope.launch {
+            try {
+                val res = persistBlock()
+                if (res.isSuccess) {
+                    scheduleDebouncedAutoBackup()
+                    onSuccess?.invoke()
+                } else {
+                    _toastMessage.tryEmit(res.exceptionOrNull()?.localizedMessage ?: "Failed to save changes")
+                }
+            } finally {
+                inFlightTaskWrites.decrementAndGet()
+            }
+        }
     }
 
     fun openTaskAlertById(taskId: String) {
@@ -254,7 +273,7 @@ class MNotesViewModel(
 
     private fun commitFloatingBadgesOptimistic(
         updated: List<FloatingBadgeItem>,
-        debounceMs: Long = 0L
+        toastOnSaved: String? = null
     ) {
         val normalized = updated.map { b ->
             b.copy(
@@ -263,13 +282,22 @@ class MNotesViewModel(
                 sizeDp = b.sizeDp.coerceIn(26f, 180f)
             )
         }
-        lastBadgeMutationAtMs = System.currentTimeMillis()
         _floatingBadges.value = normalized
-        badgePersistJob?.cancel()
-        badgePersistJob = viewModelScope.launch {
-            if (debounceMs > 0L) delay(debounceMs)
-            localStore.saveFloatingBadges(normalized)
-            scheduleDebouncedAutoBackup()
+        inFlightBadgeWrites.incrementAndGet()
+        viewModelScope.launch {
+            try {
+                val res = localStore.saveFloatingBadges(normalized)
+                if (res.isSuccess) {
+                    scheduleDebouncedAutoBackup()
+                    if (!toastOnSaved.isNullOrBlank()) {
+                        _toastMessage.tryEmit(toastOnSaved)
+                    }
+                } else {
+                    _toastMessage.tryEmit(res.exceptionOrNull()?.localizedMessage ?: "Failed to save icon")
+                }
+            } finally {
+                inFlightBadgeWrites.decrementAndGet()
+            }
         }
     }
 
@@ -326,6 +354,41 @@ class MNotesViewModel(
                 _toastMessage.tryEmit(res.exceptionOrNull()?.localizedMessage ?: "Failed to save reminder background")
             }
         }
+    }
+
+    suspend fun importWallpaperFromDevice(uri: Uri): Result<String> =
+        mediaRepository.saveWallpaperImage(uri)
+
+    fun applyMainWallpaper(uri: String, dimPercent: Int) {
+        playSound("done")
+        val clampedDim = dimPercent.coerceIn(0, 45)
+        viewModelScope.launch {
+            val res = localStore.updatePreferences(
+                mapOf(
+                    "mainWallpaperUri" to uri,
+                    "mainWallpaperDimPercent" to clampedDim
+                )
+            )
+            if (res.isSuccess) {
+                scheduleDebouncedAutoBackup()
+                val lang = preferences.value.lang
+                _toastMessage.tryEmit(
+                    if (uri.isBlank()) {
+                        if (lang == "en") "Restored default main screen background!"
+                        else "تمت استعادة خلفية الشاشة الرئيسية الأصلية!"
+                    } else {
+                        if (lang == "en") "Main screen wallpaper applied & saved!"
+                        else "تم تطبيق وحفظ خلفية الشاشة الرئيسية بنجاح!"
+                    }
+                )
+            } else {
+                _toastMessage.tryEmit(res.exceptionOrNull()?.localizedMessage ?: "Failed to save wallpaper")
+            }
+        }
+    }
+
+    fun resetMainWallpaper() {
+        applyMainWallpaper(uri = "", dimPercent = 0)
     }
 
     fun changeLauncherIcon(context: Context, iconId: String) {
@@ -625,31 +688,50 @@ class MNotesViewModel(
         showToast: Boolean = true
     ) {
         playSound("done")
-        viewModelScope.launch {
-            val res = localStore.updateTaskBadge(
-                taskId = taskId,
-                iconId = iconId,
-                visible = visible,
-                offsetX = offsetX,
-                offsetY = offsetY,
-                sizeDp = sizeDp,
-                category = category,
-                smartMode = smartMode,
-                locked = locked
-            )
-            if (res.isSuccess) {
-                scheduleDebouncedAutoBackup()
+        val clampedX = offsetX.coerceIn(-260f, 260f)
+        val clampedY = offsetY.coerceIn(-260f, 260f)
+        val clampedSize = sizeDp.coerceIn(20f, 96f)
+        val resolvedMode = smartMode?.ifBlank { "manual" } ?: "manual"
+        persistTaskMutation(
+            optimisticTransform = { list ->
+                list.map { existing ->
+                    if (existing.id == taskId) {
+                        existing.copy(
+                            badgeIconId = iconId.take(64),
+                            badgeVisible = visible,
+                            badgeOffsetX = clampedX,
+                            badgeOffsetY = clampedY,
+                            badgeSizeDp = clampedSize,
+                            badgeCategory = category?.ifBlank { "auto" } ?: existing.badgeCategory,
+                            badgeSmartMode = resolvedMode,
+                            badgeLocked = locked ?: existing.badgeLocked
+                        )
+                    } else existing
+                }
+            },
+            persistBlock = {
+                localStore.updateTaskBadge(
+                    taskId = taskId,
+                    iconId = iconId,
+                    visible = visible,
+                    offsetX = clampedX,
+                    offsetY = clampedY,
+                    sizeDp = clampedSize,
+                    category = category,
+                    smartMode = resolvedMode,
+                    locked = locked
+                )
+            },
+            onSuccess = {
                 if (showToast) {
                     val lang = preferences.value.lang
                     _toastMessage.tryEmit(
-                        if (lang == "en") "Icon applied to task circle!"
-                        else "تم تطبيق الأيقونة على دائرة المهمة!"
+                        if (lang == "en") "Icon saved & applied to task circle!"
+                        else "تم حفظ وتطبيق الأيقونة على دائرة المهمة!"
                     )
                 }
-            } else {
-                _toastMessage.tryEmit(res.exceptionOrNull()?.localizedMessage ?: "Failed to apply icon")
             }
-        }
+        )
     }
 
     fun applyBadgeToAllTasks(
@@ -661,92 +743,159 @@ class MNotesViewModel(
         smartMode: String? = null
     ) {
         playSound("done")
-        viewModelScope.launch {
-            val res = localStore.applyBadgeToAllTasks(
-                iconId = iconId,
-                offsetX = offsetX,
-                offsetY = offsetY,
-                sizeDp = sizeDp,
-                visible = visible,
-                smartMode = smartMode
-            )
-            if (res.isSuccess) {
-                scheduleDebouncedAutoBackup()
+        val clampedX = offsetX.coerceIn(-260f, 260f)
+        val clampedY = offsetY.coerceIn(-260f, 260f)
+        val clampedSize = sizeDp.coerceIn(20f, 96f)
+        persistTaskMutation(
+            optimisticTransform = { list ->
+                list.map { existing ->
+                    existing.copy(
+                        badgeIconId = iconId.take(64),
+                        badgeVisible = visible,
+                        badgeOffsetX = clampedX,
+                        badgeOffsetY = clampedY,
+                        badgeSizeDp = clampedSize,
+                        badgeSmartMode = smartMode?.ifBlank { "manual" } ?: existing.badgeSmartMode
+                    )
+                }
+            },
+            persistBlock = {
+                localStore.applyBadgeToAllTasks(
+                    iconId = iconId,
+                    offsetX = clampedX,
+                    offsetY = clampedY,
+                    sizeDp = clampedSize,
+                    visible = visible,
+                    smartMode = smartMode
+                )
+            },
+            onSuccess = {
                 val lang = preferences.value.lang
                 _toastMessage.tryEmit(
-                    if (lang == "en") "Icon applied to all tasks!"
-                    else "تم تطبيق الأيقونة على جميع المهام!"
+                    if (lang == "en") "Icon saved & applied to all tasks!"
+                    else "تم حفظ وتطبيق الأيقونة على جميع المهام!"
                 )
-            } else {
-                _toastMessage.tryEmit(res.exceptionOrNull()?.localizedMessage ?: "Failed to apply icon")
             }
-        }
+        )
     }
 
     fun updateTaskBadgePosition(taskId: String, offsetX: Float, offsetY: Float) {
-        taskBadgeDragPersistJob?.cancel()
-        taskBadgeDragPersistJob = viewModelScope.launch {
-            localStore.updateTaskBadge(
-                taskId = taskId,
-                offsetX = offsetX,
-                offsetY = offsetY
-            )
-            scheduleDebouncedAutoBackup()
-        }
+        val clampedX = offsetX.coerceIn(-260f, 260f)
+        val clampedY = offsetY.coerceIn(-260f, 260f)
+        persistTaskMutation(
+            optimisticTransform = { list ->
+                list.map { existing ->
+                    if (existing.id == taskId) existing.copy(badgeOffsetX = clampedX, badgeOffsetY = clampedY)
+                    else existing
+                }
+            },
+            persistBlock = {
+                localStore.updateTaskBadge(taskId = taskId, offsetX = clampedX, offsetY = clampedY)
+            }
+        )
     }
 
     fun updateTaskBadgeSize(taskId: String, sizeDp: Float) {
-        viewModelScope.launch {
-            localStore.updateTaskBadge(taskId = taskId, sizeDp = sizeDp)
-            scheduleDebouncedAutoBackup()
-        }
+        val clampedSize = sizeDp.coerceIn(20f, 96f)
+        persistTaskMutation(
+            optimisticTransform = { list ->
+                list.map { existing ->
+                    if (existing.id == taskId) existing.copy(badgeSizeDp = clampedSize)
+                    else existing
+                }
+            },
+            persistBlock = {
+                localStore.updateTaskBadge(taskId = taskId, sizeDp = clampedSize)
+            }
+        )
     }
 
     fun updateTaskBadgeIcon(taskId: String, iconId: String) {
         playSound("nav")
-        viewModelScope.launch {
-            localStore.updateTaskBadge(taskId = taskId, iconId = iconId, visible = true)
-            scheduleDebouncedAutoBackup()
-        }
+        persistTaskMutation(
+            optimisticTransform = { list ->
+                list.map { existing ->
+                    if (existing.id == taskId) {
+                        existing.copy(badgeIconId = iconId.take(64), badgeVisible = true, badgeSmartMode = "manual")
+                    } else existing
+                }
+            },
+            persistBlock = {
+                localStore.updateTaskBadge(taskId = taskId, iconId = iconId, visible = true, smartMode = "manual")
+            }
+        )
     }
 
     fun toggleTaskBadgeVisibility(taskId: String) {
         val current = (tasksState.value as? UiState.Success)?.data?.firstOrNull { it.id == taskId } ?: return
+        val nextVisible = !current.badgeVisible
         playSound("nav")
-        viewModelScope.launch {
-            localStore.updateTaskBadge(taskId = taskId, visible = !current.badgeVisible)
-            scheduleDebouncedAutoBackup()
-        }
+        persistTaskMutation(
+            optimisticTransform = { list ->
+                list.map { existing ->
+                    if (existing.id == taskId) existing.copy(badgeVisible = nextVisible) else existing
+                }
+            },
+            persistBlock = {
+                localStore.updateTaskBadge(taskId = taskId, visible = nextVisible)
+            }
+        )
     }
 
     fun toggleTaskBadgeLock(taskId: String) {
         val current = (tasksState.value as? UiState.Success)?.data?.firstOrNull { it.id == taskId } ?: return
+        val nextLocked = !current.badgeLocked
         playSound("nav")
-        viewModelScope.launch {
-            localStore.updateTaskBadge(taskId = taskId, locked = !current.badgeLocked)
-            scheduleDebouncedAutoBackup()
-        }
+        persistTaskMutation(
+            optimisticTransform = { list ->
+                list.map { existing ->
+                    if (existing.id == taskId) existing.copy(badgeLocked = nextLocked) else existing
+                }
+            },
+            persistBlock = {
+                localStore.updateTaskBadge(taskId = taskId, locked = nextLocked)
+            }
+        )
     }
 
     fun updateTaskBadgeMode(taskId: String, category: String? = null, smartMode: String? = null) {
         playSound("nav")
-        viewModelScope.launch {
-            localStore.updateTaskBadge(taskId = taskId, category = category, smartMode = smartMode)
-            scheduleDebouncedAutoBackup()
-        }
+        persistTaskMutation(
+            optimisticTransform = { list ->
+                list.map { existing ->
+                    if (existing.id == taskId) {
+                        existing.copy(
+                            badgeCategory = category?.ifBlank { "auto" } ?: existing.badgeCategory,
+                            badgeSmartMode = smartMode?.ifBlank { "manual" } ?: existing.badgeSmartMode
+                        )
+                    } else existing
+                }
+            },
+            persistBlock = {
+                localStore.updateTaskBadge(taskId = taskId, category = category, smartMode = smartMode)
+            }
+        )
     }
 
     fun removeTaskBadge(taskId: String) {
         playSound("exit")
-        viewModelScope.launch {
-            localStore.updateTaskBadge(
-                taskId = taskId,
-                iconId = "",
-                visible = false,
-                smartMode = "manual"
-            )
-            scheduleDebouncedAutoBackup()
-        }
+        persistTaskMutation(
+            optimisticTransform = { list ->
+                list.map { existing ->
+                    if (existing.id == taskId) {
+                        existing.copy(badgeIconId = "", badgeVisible = false, badgeSmartMode = "manual")
+                    } else existing
+                }
+            },
+            persistBlock = {
+                localStore.updateTaskBadge(
+                    taskId = taskId,
+                    iconId = "",
+                    visible = false,
+                    smartMode = "manual"
+                )
+            }
+        )
     }
 
     fun updateSmartIconSettings(transform: (SmartIconSettings) -> SmartIconSettings) {
@@ -972,14 +1121,14 @@ class MNotesViewModel(
         val updated = _floatingBadges.value.map { cur ->
             if (cur.id == badgeId) cur.copy(xFraction = xFraction, yFraction = yFraction) else cur
         }
-        commitFloatingBadgesOptimistic(updated, debounceMs = 120L)
+        commitFloatingBadgesOptimistic(updated)
     }
 
     fun updateFloatingBadgeSize(badgeId: String, sizeDp: Float) {
         val updated = _floatingBadges.value.map { cur ->
             if (cur.id == badgeId) cur.copy(sizeDp = sizeDp) else cur
         }
-        commitFloatingBadgesOptimistic(updated, debounceMs = 120L)
+        commitFloatingBadgesOptimistic(updated)
     }
 
     fun updateFloatingBadgeState(badgeId: String, stateId: String) {
@@ -988,6 +1137,34 @@ class MNotesViewModel(
             if (cur.id == badgeId) cur.copy(state = stateId) else cur
         }
         commitFloatingBadgesOptimistic(updated)
+    }
+
+    /**
+     * Explicit OK / Save action from the Floating Icon Library Sheet:
+     * immediately applies icon, size, visibility & lock state and persists synchronously to DataStore.
+     */
+    fun confirmSaveFloatingBadgeChanges(
+        badgeId: String,
+        stateId: String,
+        sizeDp: Float,
+        locked: Boolean
+    ) {
+        playSound("done")
+        val lang = preferences.value.lang
+        val updated = _floatingBadges.value.map { cur ->
+            if (cur.id == badgeId) {
+                cur.copy(
+                    state = stateId,
+                    sizeDp = sizeDp.coerceIn(26f, 180f),
+                    visible = true,
+                    locked = locked
+                )
+            } else cur
+        }
+        commitFloatingBadgesOptimistic(
+            updated = updated,
+            toastOnSaved = if (lang == "en") "Floating icon saved & applied!" else "تم حفظ وتطبيق الأيقونة العائمة بنجاح!"
+        )
     }
 
     fun toggleFloatingBadgeVisibility(badgeId: String) {
@@ -1016,6 +1193,120 @@ class MNotesViewModel(
         playSound("exit")
         val updated = _floatingBadges.value.filterNot { it.id == badgeId }
         commitFloatingBadgesOptimistic(updated)
+    }
+
+    // ==================== BLANK CUSTOMIZABLE ORDERS / CHECKLIST ACTIONS ====================
+
+    private fun commitChecklistOrders(updated: List<ChecklistOrderItem>, toastOnSaved: String? = null) {
+        val indexed = updated.mapIndexed { idx, item -> item.copy(sortOrder = idx.toLong()) }
+        _checklistOrders.value = indexed
+        inFlightChecklistWrites.incrementAndGet()
+        viewModelScope.launch {
+            try {
+                val res = localStore.saveChecklistOrders(indexed)
+                if (res.isSuccess) {
+                    scheduleDebouncedAutoBackup()
+                    if (!toastOnSaved.isNullOrBlank()) {
+                        _toastMessage.tryEmit(toastOnSaved)
+                    }
+                } else {
+                    _toastMessage.tryEmit(res.exceptionOrNull()?.localizedMessage ?: "Failed to save items")
+                }
+            } finally {
+                inFlightChecklistWrites.decrementAndGet()
+            }
+        }
+    }
+
+    fun addChecklistOrderItems(texts: List<String>) {
+        val clean = texts.map { it.trim() }.filter { it.isNotEmpty() }
+        if (clean.isEmpty()) return
+        playSound("done")
+        val base = _checklistOrders.value
+        val newItems = clean.mapIndexed { idx, text ->
+            ChecklistOrderItem(
+                id = "ord_${UUID.randomUUID().toString().take(10)}",
+                text = text,
+                status = ChecklistOrderItem.STATUS_NONE,
+                sortOrder = (base.size + idx).toLong()
+            )
+        }
+        val lang = preferences.value.lang
+        commitChecklistOrders(
+            updated = base + newItems,
+            toastOnSaved = if (lang == "en") "Saved ${newItems.size} item(s)" else "تم حفظ ${newItems.size} عنصر بنجاح"
+        )
+    }
+
+    fun cycleChecklistOrderStatus(itemId: String) {
+        playSound("nav")
+        val updated = _checklistOrders.value.map { item ->
+            if (item.id == itemId) {
+                item.copy(status = ChecklistOrderItem.nextCycledStatus(item.status))
+            } else item
+        }
+        commitChecklistOrders(updated)
+    }
+
+    fun setChecklistOrderStatus(itemId: String, status: String) {
+        playSound(if (status == ChecklistOrderItem.STATUS_CHECK) "done" else "nav")
+        val updated = _checklistOrders.value.map { item ->
+            if (item.id == itemId) item.copy(status = status) else item
+        }
+        commitChecklistOrders(updated)
+    }
+
+    fun updateChecklistOrderText(itemId: String, newText: String) {
+        val trimmed = newText.trim()
+        if (trimmed.isEmpty()) return
+        playSound("done")
+        val updated = _checklistOrders.value.map { item ->
+            if (item.id == itemId) item.copy(text = trimmed) else item
+        }
+        commitChecklistOrders(updated)
+    }
+
+    fun moveChecklistOrderItem(itemId: String, delta: Int) {
+        val list = _checklistOrders.value.toMutableList()
+        val idx = list.indexOfFirst { it.id == itemId }
+        if (idx < 0) return
+        val target = (idx + delta).coerceIn(0, list.lastIndex)
+        if (target == idx) return
+        playSound("nav")
+        val moving = list.removeAt(idx)
+        list.add(target, moving)
+        commitChecklistOrders(list)
+    }
+
+    fun deleteChecklistOrderItem(itemId: String) {
+        playSound("exit")
+        val updated = _checklistOrders.value.filterNot { it.id == itemId }
+        commitChecklistOrders(updated)
+    }
+
+    fun clearAllChecklistOrders() {
+        playSound("exit")
+        commitChecklistOrders(emptyList())
+    }
+
+    fun saveChecklistStyle(style: ChecklistStyleConfig) {
+        playSound("done")
+        val normalized = style.copy(
+            circleSizeDp = style.circleSizeDp.coerceIn(22, 52),
+            markSizeDp = style.markSizeDp.coerceIn(10, 34),
+            itemSpacingDp = style.itemSpacingDp.coerceIn(4, 22)
+        )
+        _checklistStyle.value = normalized
+        viewModelScope.launch {
+            val res = localStore.saveChecklistStyle(normalized)
+            if (res.isSuccess) {
+                scheduleDebouncedAutoBackup()
+                val lang = preferences.value.lang
+                _toastMessage.tryEmit(
+                    if (lang == "en") "Checkmark & X style saved!" else "تم حفظ تصميم علامات الصح والغلط!"
+                )
+            }
+        }
     }
 
     suspend fun cropAndSavePhoto(
@@ -1168,7 +1459,9 @@ class MNotesViewModel(
                 reqDefaultStampId = p.reqDefaultStampId,
                 reminderBgThemeId = p.reminderBgThemeId,
                 reminderDoodlePackId = p.reminderDoodlePackId,
-                reminderDoodleOpacity = p.reminderDoodleOpacity
+                reminderDoodleOpacity = p.reminderDoodleOpacity,
+                mainWallpaperUri = p.mainWallpaperUri,
+                mainWallpaperDimPercent = p.mainWallpaperDimPercent
             ),
             tasks = tasks.map {
                 BackupTaskDto(
@@ -1213,158 +1506,9 @@ class MNotesViewModel(
             },
             floatingBadges = floatingBadges.value,
             smartIconSettings = smartIconSettings.value,
-            screenDesignState = screenDesignState.value
+            checklistOrders = checklistOrders.value,
+            checklistStyle = checklistStyle.value
         )
-    }
-
-    fun applyScreenDesign(
-        designId: String,
-        config: ScreenDesignConfig?,
-        displayLabel: String
-    ) {
-        val isClassic = designId == ScreenDesignPresets.ID_CLASSIC || config == null
-        val updated = _screenDesignState.value.copy(
-            activeDesignId = if (isClassic) ScreenDesignPresets.ID_CLASSIC else designId,
-            activeDesignLabel = displayLabel,
-            activeConfig = if (isClassic) null else config
-        )
-        persistScreenDesignState(updated)
-        playSound("done")
-        val lang = preferences.value.lang
-        _toastMessage.tryEmit(
-            if (lang == "en") {
-                if (isClassic) "Restored your original Main Screen!" else "Applied \"$displayLabel\" to Main Screen!"
-            } else {
-                if (isClassic) "تمت استعادة الواجهة الرئيسية الأصلية!" else "تم تطبيق \"$displayLabel\" على الشاشة الرئيسية!"
-            }
-        )
-    }
-
-    fun resetToClassicMainScreen() {
-        applyScreenDesign(
-            designId = ScreenDesignPresets.ID_CLASSIC,
-            config = null,
-            displayLabel = if (preferences.value.lang == "en") "Current Main Screen" else "الواجهة الحالية الأصلية"
-        )
-    }
-
-    fun saveCustomDesignVersion(
-        name: String,
-        basePresetId: String,
-        config: ScreenDesignConfig,
-        overwriteVersionId: String? = null
-    ): String {
-        val now = System.currentTimeMillis()
-        val lang = preferences.value.lang
-        val cleanName = name.trim().take(60).ifEmpty {
-            val preset = ScreenDesignPresets.presetById(basePresetId)
-            val baseLabel = if (lang == "en") preset.badgeCode else preset.badgeCode
-            if (lang == "en") "Custom Option $baseLabel" else "نسختي من خيار $baseLabel"
-        }
-        val current = _screenDesignState.value
-        val existingIdx = if (overwriteVersionId != null) {
-            current.savedVersions.indexOfFirst { it.id == overwriteVersionId }
-        } else {
-            -1
-        }
-        val savedId: String
-        val updatedVersions: List<SavedScreenDesignVersion>
-        if (existingIdx >= 0) {
-            val prev = current.savedVersions[existingIdx]
-            savedId = prev.id
-            val next = prev.copy(
-                name = cleanName,
-                basePresetId = basePresetId,
-                config = config.copy(basePresetId = basePresetId),
-                updatedAtMs = now
-            )
-            updatedVersions = current.savedVersions.toMutableList().apply { set(existingIdx, next) }
-        } else {
-            savedId = "custom_${UUID.randomUUID().toString().take(8)}"
-            val newVersion = SavedScreenDesignVersion(
-                id = savedId,
-                name = cleanName,
-                basePresetId = basePresetId,
-                config = config.copy(basePresetId = basePresetId),
-                createdAtMs = now,
-                updatedAtMs = now
-            )
-            updatedVersions = listOf(newVersion) + current.savedVersions
-        }
-        // Notice: saving a custom version NEVER auto-applies it to the live Main Screen!
-        persistScreenDesignState(current.copy(savedVersions = updatedVersions))
-        playSound("done")
-        _toastMessage.tryEmit(
-            if (lang == "en") {
-                "Saved custom version \"$cleanName\" (original presets untouched)"
-            } else {
-                "تم حفظ النسخة المخصصة \"$cleanName\" (مع بقاء القوالب الأصلية كما هي)"
-            }
-        )
-        return savedId
-    }
-
-    fun duplicateSavedDesignVersion(versionId: String): String? {
-        val current = _screenDesignState.value
-        val source = current.savedVersions.firstOrNull { it.id == versionId } ?: return null
-        val lang = preferences.value.lang
-        val suffix = if (lang == "en") " (Copy)" else " (نسخة)"
-        val copyName = "${source.name.take(50)}$suffix"
-        return saveCustomDesignVersion(
-            name = copyName,
-            basePresetId = source.basePresetId,
-            config = source.config,
-            overwriteVersionId = null
-        )
-    }
-
-    fun renameSavedDesignVersion(versionId: String, newName: String) {
-        val trimmed = newName.trim().take(60)
-        if (trimmed.isEmpty()) return
-        val current = _screenDesignState.value
-        val now = System.currentTimeMillis()
-        val updatedVersions = current.savedVersions.map { v ->
-            if (v.id == versionId) v.copy(name = trimmed, updatedAtMs = now) else v
-        }
-        val updatedActiveLabel = if (current.activeDesignId == versionId) trimmed else current.activeDesignLabel
-        persistScreenDesignState(
-            current.copy(
-                activeDesignLabel = updatedActiveLabel,
-                savedVersions = updatedVersions
-            )
-        )
-        playSound("done")
-    }
-
-    fun deleteSavedDesignVersion(versionId: String) {
-        val current = _screenDesignState.value
-        val updatedVersions = current.savedVersions.filterNot { it.id == versionId }
-        val wasActive = current.activeDesignId == versionId
-        val nextState = if (wasActive) {
-            current.copy(
-                activeDesignId = ScreenDesignPresets.ID_CLASSIC,
-                activeDesignLabel = "",
-                activeConfig = null,
-                savedVersions = updatedVersions
-            )
-        } else {
-            current.copy(savedVersions = updatedVersions)
-        }
-        persistScreenDesignState(nextState)
-        playSound("exit")
-        val lang = preferences.value.lang
-        _toastMessage.tryEmit(
-            if (lang == "en") "Deleted saved version" else "تم حذف النسخة المحفوظة"
-        )
-    }
-
-    private fun persistScreenDesignState(nextState: ScreenDesignStoreState) {
-        lastScreenDesignMutationAtMs = System.currentTimeMillis()
-        _screenDesignState.value = nextState
-        viewModelScope.launch {
-            localStore.saveScreenDesignState(nextState)
-            scheduleDebouncedAutoBackup()
-        }
     }
 
     fun serializeBackupJson(): String = json.encodeToString(buildBackupSnapshot())
@@ -1384,10 +1528,9 @@ class MNotesViewModel(
             if (res.isSuccess) {
                 lastSmartSettingsMutationAtMs = 0L
                 _smartIconSettings.value = snapshot.smartIconSettings
-                lastScreenDesignMutationAtMs = 0L
-                _screenDesignState.value = snapshot.screenDesignState
+                _checklistOrders.value = snapshot.checklistOrders
+                _checklistStyle.value = snapshot.checklistStyle
                 if (snapshot.floatingBadges.isNotEmpty()) {
-                    lastBadgeMutationAtMs = 0L
                     _floatingBadges.value = snapshot.floatingBadges
                 }
                 playSound("done")
@@ -1466,13 +1609,12 @@ class MNotesViewModel(
                     val res = localStore.restoreFromSnapshot(snapshot)
                     if (res.isSuccess) {
                         if (snapshot.floatingBadges.isNotEmpty()) {
-                            lastBadgeMutationAtMs = 0L
                             _floatingBadges.value = snapshot.floatingBadges
                         }
                         lastSmartSettingsMutationAtMs = 0L
                         _smartIconSettings.value = snapshot.smartIconSettings
-                        lastScreenDesignMutationAtMs = 0L
-                        _screenDesignState.value = snapshot.screenDesignState
+                        _checklistOrders.value = snapshot.checklistOrders
+                        _checklistStyle.value = snapshot.checklistStyle
                         _lastBackupStatus.value = "success"
                         _lastBackupError.value = null
                         playSound("done")
