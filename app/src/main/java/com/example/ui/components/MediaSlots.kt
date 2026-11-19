@@ -380,48 +380,6 @@ fun MediaAvatarSlot(
                 )
             }
         }
-
-        if (isResting) {
-            val badgeDp = (size * 0.54f).coerceIn(22.dp, 42.dp)
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .offset(x = 5.dp, y = (-5).dp)
-                    .size(badgeDp)
-                    .shadow(5.dp, CircleShape, clip = false)
-                    .clip(CircleShape)
-                    .background(Color(0xFFE8F7F2))
-                    .border(1.8.dp, Color.White, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Image(
-                    painter = painterResource(id = R.drawable.img_sleepy_badge_1795028747325),
-                    contentDescription = "Resting today",
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clip(CircleShape)
-                )
-            }
-
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .offset(x = (-3).dp, y = 3.dp)
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(Color(0xFF475569))
-                    .border(1.dp, Color.White, RoundedCornerShape(999.dp))
-                    .padding(horizontal = 5.dp, vertical = 1.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "Zzz",
-                    color = Color.White,
-                    fontSize = 8.sp,
-                    fontWeight = FontWeight.ExtraBold
-                )
-            }
-        }
     }
 }
 

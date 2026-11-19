@@ -1,8 +1,10 @@
 package com.example
 
 import android.app.Activity
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -14,6 +16,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.audio.SoundEngine
 import com.example.data.LocalMediaRepository
@@ -21,7 +24,10 @@ import com.example.data.LocalStoreRepository
 import com.example.data.MNotesRepository
 import com.example.ui.MNotesViewModel
 import com.example.ui.MainScreen
+import com.example.ui.auth.completeEmailVerificationSignInLink
 import com.example.ui.theme.MNotesTheme
+import com.google.firebase.Firebase
+import com.google.firebase.auth.auth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlin.math.abs
 
@@ -29,8 +35,32 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        handleIncomingEmailLink(intent)
         setContent {
             MNotesAppRoot()
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIncomingEmailLink(intent)
+    }
+
+    private fun handleIncomingEmailLink(intent: Intent?) {
+        val link = intent?.data?.toString() ?: return
+        if (Firebase.auth.isSignInWithEmailLink(link)) {
+            completeEmailVerificationSignInLink(
+                context = this,
+                emailLink = link,
+                scope = lifecycleScope,
+                onSuccess = { email ->
+                    Toast.makeText(this, "Signed in: $email", Toast.LENGTH_SHORT).show()
+                },
+                onError = { err ->
+                    Toast.makeText(this, err, Toast.LENGTH_LONG).show()
+                }
+            )
         }
     }
 }

@@ -39,10 +39,13 @@ import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.Backup
 import androidx.compose.material.icons.rounded.Brush
+import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ContentCut
 import androidx.compose.material.icons.rounded.DashboardCustomize
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.Email
+import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Language
@@ -106,7 +109,10 @@ import com.example.model.SmartTask
 import com.example.model.TrimmedRingtone
 import com.example.model.UserPreferences
 import com.example.ui.MNotesViewModel
+import com.example.ui.auth.completeEmailVerificationSignInLink
+import com.example.ui.auth.getPendingSignInEmail
 import com.example.ui.auth.onGoogleSignInClicked
+import com.example.ui.auth.sendEmailVerificationSignInLink
 import com.example.ui.auth.signOut
 import com.example.ui.theme.LocalMNotesColors
 import com.example.ui.theme.LocalMNotesRefreshHz
@@ -141,11 +147,18 @@ fun SettingsSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val connectedEmail by viewModel.connectedEmail.collectAsStateWithLifecycle()
     val floatingBadges by viewModel.floatingBadges.collectAsStateWithLifecycle()
+    val lastBackupStatus by viewModel.lastBackupStatus.collectAsStateWithLifecycle()
+    val lastBackupError by viewModel.lastBackupError.collectAsStateWithLifecycle()
 
     var openFolder by remember(initialFolder) { mutableStateOf(initialFolder) }
     var openSubSection by remember { mutableStateOf<String?>(null) }
     var isLinkingGoogle by remember { mutableStateOf(false) }
     var googleLinkError by remember { mutableStateOf<String?>(null) }
+    var showEmailLinkBox by remember { mutableStateOf(false) }
+    var emailInput by remember { mutableStateOf(getPendingSignInEmail(context)) }
+    var emailLinkSent by remember { mutableStateOf(false) }
+    var isSendingEmailLink by remember { mutableStateOf(false) }
+    var pasteLinkInput by remember { mutableStateOf("") }
 
     // Library upload name state
     var newPhotoName by remember { mutableStateOf("") }
@@ -298,10 +311,10 @@ fun SettingsSheet(
                 }
             }
 
-            // 1. Cloud Backup & Sync
+            // 1. Online Backup & Sync
             SettingsFolder(
-                title = AppStrings.get(lang, "fBackup"),
-                subtitle = AppStrings.get(lang, "fBackupSub"),
+                title = if (lang == "en") "Backup & Sync" else "النسخ الاحتياطي والمزامنة السحابية",
+                subtitle = if (lang == "en") "Cloud backup, auto sync, restore & passwordless email login" else "نسخ احتياطي سحابي تلقائي، استعادة ودخول بدون كلمة مرور",
                 icon = Icons.Rounded.Backup,
                 isOpen = openFolder == "backup",
                 lang = lang,
@@ -311,6 +324,83 @@ fun SettingsSheet(
                 }
             ) {
                 val activeEmail = connectedEmail
+
+                // Clear Backup Status Indicator Card (Status + Timestamp + Synced Item Counts)
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = when (lastBackupStatus) {
+                        "success" -> Color(0xFFECFDF5)
+                        "error" -> Color(0xFFFEF2F2)
+                        else -> colors.bgMain
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(
+                            width = 1.dp,
+                            color = when (lastBackupStatus) {
+                                "success" -> Color(0xFF6EE7B7)
+                                "error" -> Color(0xFFFCA5A5)
+                                else -> colors.borderSoft
+                            },
+                            shape = RoundedCornerShape(14.dp)
+                        )
+                        .testTag("backup_status_card")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = when (lastBackupStatus) {
+                                "success" -> Icons.Rounded.CheckCircle
+                                "error" -> Icons.Rounded.ErrorOutline
+                                else -> Icons.Rounded.Backup
+                            },
+                            contentDescription = null,
+                            tint = when (lastBackupStatus) {
+                                "success" -> Color(0xFF059669)
+                                "error" -> Color(0xFFDC2626)
+                                else -> colors.primary
+                            },
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(
+                                text = when (lastBackupStatus) {
+                                    "success" -> if (lang == "en") "Backup Succeeded" else "تم النسخ الاحتياطي بنجاح"
+                                    "error" -> if (lang == "en") "Backup Failed" else "فشل النسخ الاحتياطي"
+                                    else -> if (prefs.lastBackupLabel.isNotBlank()) {
+                                        if (lang == "en") "Last Cloud Backup Saved" else "آخر نسخة سحابية محفوظة"
+                                    } else {
+                                        if (lang == "en") "No Cloud Backup Yet" else "لا توجد نسخة سحابية بعد"
+                                    }
+                                },
+                                color = when (lastBackupStatus) {
+                                    "success" -> Color(0xFF047857)
+                                    "error" -> Color(0xFFB91C1C)
+                                    else -> colors.textDark
+                                },
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                            Text(
+                                text = if (lastBackupStatus == "error" && !lastBackupError.isNullOrBlank()) {
+                                    lastBackupError!!
+                                } else if (lang == "en") {
+                                    "Last backup: ${prefs.lastBackupLabel.ifBlank { "Never" }} • ${tasks.size} tasks • ${floatingBadges.size} icons"
+                                } else {
+                                    "آخر نسخة: ${prefs.lastBackupLabel.ifBlank { "لا يوجد" }} • ${tasks.size} مهام • ${floatingBadges.size} أيقونات"
+                                },
+                                color = colors.textMuted,
+                                fontSize = 10.5.sp
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+
                 if (activeEmail.isNullOrBlank()) {
                     Surface(
                         shape = RoundedCornerShape(16.dp),
@@ -324,13 +414,21 @@ fun SettingsSheet(
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Text(
-                                text = AppStrings.get(lang, "localModeStatus"),
+                                text = if (lang == "en") {
+                                    "Passwordless Account Sign-In"
+                                } else {
+                                    "تسجيل الدخول بدون كلمة مرور (للحفظ والمزامنة)"
+                                },
                                 color = colors.textDark,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.ExtraBold
                             )
                             Text(
-                                text = "${AppStrings.get(lang, "lastBackup")} ${prefs.lastBackupLabel.ifBlank { AppStrings.get(lang, "none") }}",
+                                text = if (lang == "en") {
+                                    "Sign in securely using your Google account or an email verification link — no password needed. Your tasks, settings, and floating icon positions sync safely."
+                                } else {
+                                    "سجّل الدخول بحساب جوجل بضغطة واحدة أو عبر رابط تحقق يُرسل لبريدك بدون كلمة مرور، لحفظ مهامك وإعداداتك ومواقع الأيقونات العائمة."
+                                },
                                 color = colors.textMuted,
                                 fontSize = 11.sp
                             )
@@ -350,6 +448,7 @@ fun SettingsSheet(
                                 }
                             }
 
+                            // Primary 1-Tap Passwordless Google Email Sign-In
                             Button(
                                 onClick = {
                                     googleLinkError = null
@@ -361,6 +460,10 @@ fun SettingsSheet(
                                             isLinkingGoogle = false
                                             googleLinkError = null
                                             viewModel.playSound("done")
+                                            onShowToast(
+                                                if (lang == "en") "Signed in for Cloud Backup & Sync"
+                                                else "تم تسجيل الدخول للنسخ الاحتياطي السحابي"
+                                            )
                                         },
                                         onAuthError = { msg ->
                                             isLinkingGoogle = false
@@ -392,7 +495,156 @@ fun SettingsSheet(
                                 } else {
                                     Icon(Icons.Rounded.AccountCircle, contentDescription = null, modifier = Modifier.size(16.dp))
                                     Spacer(Modifier.width(6.dp))
-                                    Text(AppStrings.get(lang, "connectGoogleBackup"), fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                                    Text(
+                                        text = if (lang == "en") "Sign In with Google (No Password)" else "الدخول السريع بحساب جوجل (بدون كلمة مرور)",
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+
+                            // Secondary Passwordless Option: Email Verification Link
+                            OutlinedButton(
+                                onClick = {
+                                    viewModel.playSound("nav")
+                                    showEmailLinkBox = !showEmailLinkBox
+                                },
+                                shape = RoundedCornerShape(14.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(42.dp)
+                                    .testTag("settings_toggle_email_link_signin")
+                            ) {
+                                Icon(Icons.Rounded.Email, contentDescription = null, tint = colors.primary, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    text = if (lang == "en") "Sign In with Email Verification Link" else "تسجيل الدخول عبر رابط تحقق للبريد الإلكتروني",
+                                    color = colors.primary,
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+
+                            if (showEmailLinkBox) {
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    OutlinedTextField(
+                                        value = emailInput,
+                                        onValueChange = { emailInput = it },
+                                        singleLine = true,
+                                        placeholder = {
+                                            Text(
+                                                text = if (lang == "en") "name@example.com" else "example@email.com",
+                                                fontSize = 12.sp
+                                            )
+                                        },
+                                        shape = RoundedCornerShape(12.dp),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .testTag("settings_email_link_input")
+                                    )
+
+                                    Button(
+                                        onClick = {
+                                            googleLinkError = null
+                                            isSendingEmailLink = true
+                                            sendEmailVerificationSignInLink(
+                                                context = context,
+                                                rawEmail = emailInput,
+                                                lang = lang,
+                                                scope = scope,
+                                                onLinkSent = {
+                                                    isSendingEmailLink = false
+                                                    emailLinkSent = true
+                                                    viewModel.playSound("done")
+                                                    onShowToast(
+                                                        if (lang == "en") "Verification link sent! Check your inbox."
+                                                        else "تم إرسال رابط التحقق إلى بريدك الإلكتروني!"
+                                                    )
+                                                },
+                                                onError = { err ->
+                                                    isSendingEmailLink = false
+                                                    googleLinkError = err
+                                                }
+                                            )
+                                        },
+                                        enabled = !isSendingEmailLink,
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(42.dp)
+                                            .testTag("settings_send_email_link_btn")
+                                    ) {
+                                        if (isSendingEmailLink) {
+                                            CircularProgressIndicator(
+                                                color = Color.White,
+                                                strokeWidth = 2.dp,
+                                                modifier = Modifier.size(15.dp)
+                                            )
+                                        } else {
+                                            Text(
+                                                text = if (lang == "en") "Send Verification Link" else "إرسال رابط التحقق",
+                                                fontSize = 11.5.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+
+                                    if (emailLinkSent) {
+                                        Text(
+                                            text = if (lang == "en") {
+                                                "Tap the link in your email to finish signing in, or paste the verification link below:"
+                                            } else {
+                                                "اضغط على الرابط المرسل لبريدك لإكمال الدخول تلقائياً، أو الصق الرابط هنا:"
+                                            },
+                                            color = Color(0xFF047857),
+                                            fontSize = 10.5.sp,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                        OutlinedTextField(
+                                            value = pasteLinkInput,
+                                            onValueChange = { pasteLinkInput = it },
+                                            singleLine = true,
+                                            placeholder = {
+                                                Text(
+                                                    text = if (lang == "en") "Paste email verification link..." else "الصق رابط التحقق هنا...",
+                                                    fontSize = 11.5.sp
+                                                )
+                                            },
+                                            shape = RoundedCornerShape(12.dp),
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                        OutlinedButton(
+                                            onClick = {
+                                                completeEmailVerificationSignInLink(
+                                                    context = context,
+                                                    emailLink = pasteLinkInput,
+                                                    explicitEmail = emailInput,
+                                                    lang = lang,
+                                                    scope = scope,
+                                                    onSuccess = { verified ->
+                                                        googleLinkError = null
+                                                        emailLinkSent = false
+                                                        pasteLinkInput = ""
+                                                        viewModel.playSound("done")
+                                                        onShowToast(
+                                                            if (lang == "en") "Signed in as $verified"
+                                                            else "تم الدخول بحساب $verified"
+                                                        )
+                                                    },
+                                                    onError = { err -> googleLinkError = err }
+                                                )
+                                            },
+                                            shape = RoundedCornerShape(12.dp),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Text(
+                                                text = if (lang == "en") "Verify Link & Sign In" else "تأكيد الرابط وتسجيل الدخول",
+                                                fontSize = 11.5.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -424,9 +676,13 @@ fun SettingsSheet(
                                         overflow = TextOverflow.Ellipsis
                                     )
                                     Text(
-                                        text = "${AppStrings.get(lang, "lastBackup")} ${prefs.lastBackupLabel.ifBlank { AppStrings.get(lang, "none") }}",
+                                        text = if (lang == "en") {
+                                            "Cloud sync active • All data & floating icons protected"
+                                        } else {
+                                            "المزامنة السحابية مفعلة • كل بياناتك وأيقوناتك محفوظة"
+                                        },
                                         color = colors.textMuted,
-                                        fontSize = 11.sp
+                                        fontSize = 10.5.sp
                                     )
                                 }
                                 OutlinedButton(
@@ -458,7 +714,7 @@ fun SettingsSheet(
                     Spacer(Modifier.height(8.dp))
 
                     SettingsSwitchRow(
-                        title = AppStrings.get(lang, "autoBackup"),
+                        title = if (lang == "en") "Auto Backup (Sync changes automatically)" else "النسخ الاحتياطي التلقائي عند أي تعديل",
                         checked = prefs.autoBackup,
                         onCheckedChange = {
                             viewModel.playSound("nav")
@@ -468,31 +724,30 @@ fun SettingsSheet(
 
                     Spacer(Modifier.height(8.dp))
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    Button(
+                        onClick = { viewModel.runCloudBackup(isAuto = false) },
+                        enabled = !isBusyBackup,
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp)
+                            .testTag("settings_manual_backup")
                     ) {
-                        Button(
-                            onClick = { viewModel.runCloudBackup(isAuto = false) },
-                            enabled = !isBusyBackup,
-                            shape = RoundedCornerShape(14.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(44.dp)
-                                .testTag("settings_manual_backup")
-                        ) {
-                            if (isBusyBackup) {
-                                CircularProgressIndicator(
-                                    color = Color.White,
-                                    strokeWidth = 2.dp,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            } else {
-                                Icon(Icons.Rounded.Backup, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text(AppStrings.get(lang, "manualBackup"), fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
-                            }
+                        if (isBusyBackup) {
+                            CircularProgressIndicator(
+                                color = Color.White,
+                                strokeWidth = 2.dp,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        } else {
+                            Icon(Icons.Rounded.Backup, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = if (lang == "en") "Back Up Now" else "نسخ احتياطي الآن",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.ExtraBold
+                            )
                         }
                     }
 
@@ -510,7 +765,7 @@ fun SettingsSheet(
                         Icon(Icons.Rounded.Restore, contentDescription = null, tint = colors.primary, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(6.dp))
                         Text(
-                            text = AppStrings.get(lang, "restoreBackup"),
+                            text = if (lang == "en") "Restore Previous Backup" else "استعادة آخر نسخة احتياطية",
                             color = colors.primary,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold
@@ -1861,10 +2116,10 @@ fun SettingsSheet(
                 )
             }
 
-            // 11. Dedicated Circular Character Icon Studio (Original Baby Badge Controls)
+            // 11. Dedicated Floating Circular Icon Studio (Interactive Preview + 110+ Icons)
             SettingsFolder(
-                title = if (lang == "en") "Circular Character Icon" else "الأيقونة الدائرية للشخصية (تحريك وتكرار وحالات)",
-                subtitle = if (lang == "en") "Move, resize, duplicate, hide/show & switch states" else "تحريك حر، تغيير الحجم، تكرار، إخفاء وتبديل الحالات",
+                title = if (lang == "en") "Floating Circular Icon & Library" else "الأيقونة الدائرية العائمة (معاينة ومكتبة 110+ أيقونة)",
+                subtitle = if (lang == "en") "Interactive drag preview, live resize, 110+ icons & copies" else "معاينة تفاعلية بالسحب، تغيير حجم فوري، مكتبة 110+ أيقونة",
                 icon = Icons.Rounded.Mood,
                 isOpen = openFolder == "characterBadge",
                 lang = lang,
@@ -1875,6 +2130,8 @@ fun SettingsSheet(
             ) {
                 FloatingBadgeSettingsFolderContent(
                     badges = floatingBadges,
+                    prefs = prefs,
+                    sampleTask = tasks.firstOrNull(),
                     lang = lang,
                     viewModel = viewModel
                 )

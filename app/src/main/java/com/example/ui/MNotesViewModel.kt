@@ -25,6 +25,8 @@ import com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.auth
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -40,6 +42,7 @@ import kotlinx.serialization.json.Json
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.UUID
 
 sealed interface UiState<out T> {
     data object Loading : UiState<Nothing>
@@ -111,8 +114,13 @@ class MNotesViewModel(
     val trimmedRingtones: StateFlow<List<TrimmedRingtone>> = mediaRepository.ringtonesFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
-    val floatingBadges: StateFlow<List<FloatingBadgeItem>> = localStore.floatingBadgesFlow
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+    private val _floatingBadges = MutableStateFlow<List<FloatingBadgeItem>>(emptyList())
+    val floatingBadges: StateFlow<List<FloatingBadgeItem>> = _floatingBadges.asStateFlow()
+
+    private var badgePersistJob: Job? = null
+    private var autoBackupDebounceJob: Job? = null
+    @Volatile
+    private var lastBadgeMutationAtMs: Long = 0L
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
@@ -129,10 +137,55 @@ class MNotesViewModel(
     private val _isBusyBackup = MutableStateFlow(false)
     val isBusyBackup: StateFlow<Boolean> = _isBusyBackup.asStateFlow()
 
+    private val _lastBackupStatus = MutableStateFlow("idle") // "idle" | "success" | "error"
+    val lastBackupStatus: StateFlow<String> = _lastBackupStatus.asStateFlow()
+
+    private val _lastBackupError = MutableStateFlow<String?>(null)
+    val lastBackupError: StateFlow<String?> = _lastBackupError.asStateFlow()
+
     init {
         auth.addAuthStateListener(authListener)
         viewModelScope.launch {
             localStore.ensureInitialized()
+        }
+        viewModelScope.launch {
+            localStore.floatingBadgesFlow.collect { stored ->
+                // Avoid clobbering active 120Hz drags/slider ticks with stale DataStore emissions
+                val now = System.currentTimeMillis()
+                if (now - lastBadgeMutationAtMs > 450L || _floatingBadges.value.isEmpty()) {
+                    _floatingBadges.value = stored
+                }
+            }
+        }
+    }
+
+    private fun scheduleDebouncedAutoBackup() {
+        if (!preferences.value.autoBackup || auth.currentUser == null) return
+        autoBackupDebounceJob?.cancel()
+        autoBackupDebounceJob = viewModelScope.launch {
+            delay(1800L)
+            runCloudBackup(isAuto = true)
+        }
+    }
+
+    private fun commitFloatingBadgesOptimistic(
+        updated: List<FloatingBadgeItem>,
+        debounceMs: Long = 0L
+    ) {
+        val normalized = updated.map { b ->
+            b.copy(
+                xFraction = b.xFraction.coerceIn(0f, 1f),
+                yFraction = b.yFraction.coerceIn(0f, 1f),
+                sizeDp = b.sizeDp.coerceIn(26f, 180f)
+            )
+        }
+        lastBadgeMutationAtMs = System.currentTimeMillis()
+        _floatingBadges.value = normalized
+        badgePersistJob?.cancel()
+        badgePersistJob = viewModelScope.launch {
+            if (debounceMs > 0L) delay(debounceMs)
+            localStore.saveFloatingBadges(normalized)
+            scheduleDebouncedAutoBackup()
         }
     }
 
@@ -583,75 +636,92 @@ class MNotesViewModel(
         }
     }
 
-    fun addFloatingBadge(stateId: String = "sleeping", sizeDp: Float = 46f) {
+    fun addFloatingBadge(stateId: String = "sleeping", sizeDp: Float = 46f): String {
         playSound("done")
-        viewModelScope.launch {
-            localStore.addFloatingBadge(stateId = stateId, sizeDp = sizeDp)
-        }
+        val current = _floatingBadges.value
+        val count = current.size
+        val newId = "badge_${UUID.randomUUID().toString().take(8)}"
+        val x = (0.78f - (count % 4) * 0.14f).coerceIn(0.10f, 0.86f)
+        val y = (0.16f + (count / 4) * 0.10f + (count % 3) * 0.05f).coerceIn(0.10f, 0.82f)
+        val item = FloatingBadgeItem(
+            id = newId,
+            state = stateId,
+            xFraction = x,
+            yFraction = y,
+            sizeDp = sizeDp.coerceIn(26f, 180f),
+            visible = true,
+            locked = false
+        )
+        commitFloatingBadgesOptimistic(current + item)
+        return newId
     }
 
-    fun duplicateFloatingBadge(badgeId: String) {
+    fun duplicateFloatingBadge(badgeId: String): String? {
         playSound("done")
-        viewModelScope.launch {
-            localStore.duplicateFloatingBadge(badgeId)
-        }
+        val current = _floatingBadges.value
+        val source = current.firstOrNull { it.id == badgeId } ?: return null
+        val newId = "badge_${UUID.randomUUID().toString().take(8)}"
+        val nextX = if (source.xFraction + 0.09f <= 0.88f) source.xFraction + 0.09f else (source.xFraction - 0.11f).coerceAtLeast(0.06f)
+        val nextY = if (source.yFraction + 0.07f <= 0.86f) source.yFraction + 0.07f else (source.yFraction - 0.09f).coerceAtLeast(0.08f)
+        val copy = source.copy(
+            id = newId,
+            xFraction = nextX,
+            yFraction = nextY,
+            visible = true,
+            locked = false
+        )
+        commitFloatingBadgesOptimistic(current + copy)
+        return newId
     }
 
     fun updateFloatingBadgePosition(badgeId: String, xFraction: Float, yFraction: Float) {
-        viewModelScope.launch {
-            localStore.updateFloatingBadge(badgeId) { cur ->
-                cur.copy(xFraction = xFraction, yFraction = yFraction)
-            }
+        val updated = _floatingBadges.value.map { cur ->
+            if (cur.id == badgeId) cur.copy(xFraction = xFraction, yFraction = yFraction) else cur
         }
+        commitFloatingBadgesOptimistic(updated, debounceMs = 120L)
     }
 
     fun updateFloatingBadgeSize(badgeId: String, sizeDp: Float) {
-        viewModelScope.launch {
-            localStore.updateFloatingBadge(badgeId) { cur ->
-                cur.copy(sizeDp = sizeDp)
-            }
+        val updated = _floatingBadges.value.map { cur ->
+            if (cur.id == badgeId) cur.copy(sizeDp = sizeDp) else cur
         }
+        commitFloatingBadgesOptimistic(updated, debounceMs = 120L)
     }
 
     fun updateFloatingBadgeState(badgeId: String, stateId: String) {
         playSound("nav")
-        viewModelScope.launch {
-            localStore.updateFloatingBadge(badgeId) { cur ->
-                cur.copy(state = stateId)
-            }
+        val updated = _floatingBadges.value.map { cur ->
+            if (cur.id == badgeId) cur.copy(state = stateId) else cur
         }
+        commitFloatingBadgesOptimistic(updated)
     }
 
     fun toggleFloatingBadgeVisibility(badgeId: String) {
         playSound("nav")
-        viewModelScope.launch {
-            localStore.updateFloatingBadge(badgeId) { cur ->
-                cur.copy(visible = !cur.visible)
-            }
+        val updated = _floatingBadges.value.map { cur ->
+            if (cur.id == badgeId) cur.copy(visible = !cur.visible) else cur
         }
+        commitFloatingBadgesOptimistic(updated)
     }
 
     fun toggleFloatingBadgeLock(badgeId: String) {
         playSound("nav")
-        viewModelScope.launch {
-            localStore.updateFloatingBadge(badgeId) { cur ->
-                cur.copy(locked = !cur.locked)
-            }
+        val updated = _floatingBadges.value.map { cur ->
+            if (cur.id == badgeId) cur.copy(locked = !cur.locked) else cur
         }
+        commitFloatingBadgesOptimistic(updated)
     }
 
     fun setAllFloatingBadgesVisibility(visible: Boolean) {
         playSound("nav")
-        viewModelScope.launch {
-            localStore.setAllFloatingBadgesVisibility(visible)
-        }
+        val updated = _floatingBadges.value.map { it.copy(visible = visible) }
+        commitFloatingBadgesOptimistic(updated)
     }
 
     fun deleteFloatingBadge(badgeId: String) {
         playSound("exit")
-        viewModelScope.launch {
-            localStore.deleteFloatingBadge(badgeId)
-        }
+        val updated = _floatingBadges.value.filterNot { it.id == badgeId }
+        commitFloatingBadgesOptimistic(updated)
     }
 
     suspend fun cropAndSavePhoto(
@@ -884,13 +954,20 @@ class MNotesViewModel(
                 payload = snap
             )
             if (res.isSuccess) {
+                _lastBackupStatus.value = "success"
+                _lastBackupError.value = null
                 localStore.updatePreferences(mapOf("lastBackupLabel" to nowLabel))
                 if (!isAuto) {
                     playSound("done")
                     _toastMessage.tryEmit(AppStrings.get(lang, "backupSaved"))
                 }
-            } else if (!isAuto) {
-                _toastMessage.tryEmit(res.exceptionOrNull()?.localizedMessage ?: "Cloud backup failed")
+            } else {
+                val errMsg = res.exceptionOrNull()?.localizedMessage ?: "Cloud backup failed"
+                _lastBackupStatus.value = "error"
+                _lastBackupError.value = errMsg
+                if (!isAuto) {
+                    _toastMessage.tryEmit(errMsg)
+                }
             }
             if (!isAuto) _isBusyBackup.value = false
         }
@@ -908,7 +985,10 @@ class MNotesViewModel(
             val fetched = repository.fetchLatestCloudBackup(user.uid)
             val record = fetched.getOrNull()
             if (fetched.isFailure) {
-                _toastMessage.tryEmit(fetched.exceptionOrNull()?.localizedMessage ?: "Restore failed")
+                val errMsg = fetched.exceptionOrNull()?.localizedMessage ?: "Restore failed"
+                _lastBackupStatus.value = "error"
+                _lastBackupError.value = errMsg
+                _toastMessage.tryEmit(errMsg)
             } else if (record == null || record.snapshotJson.isBlank()) {
                 _toastMessage.tryEmit(AppStrings.get(lang, "noBackupFound"))
             } else {
@@ -916,14 +996,26 @@ class MNotesViewModel(
                     json.decodeFromString<BackupSnapshotPayload>(record.snapshotJson)
                 }
                 if (parsed.isSuccess) {
-                    val res = localStore.restoreFromSnapshot(parsed.getOrThrow())
+                    val snapshot = parsed.getOrThrow()
+                    val res = localStore.restoreFromSnapshot(snapshot)
                     if (res.isSuccess) {
+                        if (snapshot.floatingBadges.isNotEmpty()) {
+                            lastBadgeMutationAtMs = 0L
+                            _floatingBadges.value = snapshot.floatingBadges
+                        }
+                        _lastBackupStatus.value = "success"
+                        _lastBackupError.value = null
                         playSound("done")
                         _toastMessage.tryEmit(AppStrings.get(lang, "backupRestored"))
                     } else {
-                        _toastMessage.tryEmit(res.exceptionOrNull()?.localizedMessage ?: "Restore failed")
+                        val errMsg = res.exceptionOrNull()?.localizedMessage ?: "Restore failed"
+                        _lastBackupStatus.value = "error"
+                        _lastBackupError.value = errMsg
+                        _toastMessage.tryEmit(errMsg)
                     }
                 } else {
+                    _lastBackupStatus.value = "error"
+                    _lastBackupError.value = AppStrings.get(lang, "invalidFile")
                     _toastMessage.tryEmit(AppStrings.get(lang, "invalidFile"))
                 }
             }

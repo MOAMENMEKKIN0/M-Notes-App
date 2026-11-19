@@ -59,6 +59,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.localization.AppStrings
 import com.example.model.SmartTask
 import com.example.ui.components.AlertOverlay
+import com.example.ui.components.FloatingBadgeLibrarySheet
 import com.example.ui.components.FloatingCharacterBadgesOverlay
 import com.example.ui.components.HomeQuickOverviewSheet
 import com.example.ui.components.PhotoCropSheet
@@ -122,6 +123,7 @@ fun MainScreen(viewModel: MNotesViewModel) {
     var photoPickTarget by remember { mutableStateOf<PhotoPickTarget?>(null) }
     var cropSourceUri by remember { mutableStateOf<Uri?>(null) }
     var cropDestination by remember { mutableStateOf<CropDestination?>(null) }
+    var libraryTargetBadgeId by remember { mutableStateOf<String?>(null) }
 
     // Observe transient toast messages
     LaunchedEffect(Unit) {
@@ -355,22 +357,55 @@ fun MainScreen(viewModel: MNotesViewModel) {
                 }
             }
 
-            // Draggable, Resizable, Persistent Original Circular Character Icon(s)
+            // Independent Draggable, Resizable, Tappable Small Floating Circular Icon(s)
             FloatingCharacterBadgesOverlay(
                 badges = floatingBadges,
                 lang = lang,
-                onUpdatePosition = { id, x, y -> viewModel.updateFloatingBadgePosition(id, x, y) },
-                onUpdateSize = { id, sizeDp -> viewModel.updateFloatingBadgeSize(id, sizeDp) },
-                onCycleState = { id, nextState -> viewModel.updateFloatingBadgeState(id, nextState) },
-                onDuplicate = { id -> viewModel.duplicateFloatingBadge(id) },
-                onHide = { id -> viewModel.toggleFloatingBadgeVisibility(id) },
-                onDelete = { id -> viewModel.deleteFloatingBadge(id) },
-                onOpenBadgeSettings = {
+                onTapBadge = { tappedBadge ->
                     viewModel.playSound("enter")
-                    initialSettingsFolder = "characterBadge"
-                    showSettings = true
-                }
+                    libraryTargetBadgeId = tappedBadge.id
+                },
+                onUpdatePosition = { id, x, y -> viewModel.updateFloatingBadgePosition(id, x, y) }
             )
+
+            // Dedicated 110+ Icon Selection Library Sheet (opened ONLY by tapping a small floating icon)
+            val activeLibraryBadge = libraryTargetBadgeId?.let { targetId ->
+                floatingBadges.firstOrNull { it.id == targetId }
+            }
+            if (activeLibraryBadge != null) {
+                FloatingBadgeLibrarySheet(
+                    badge = activeLibraryBadge,
+                    lang = lang,
+                    onSelectIcon = { iconId ->
+                        viewModel.updateFloatingBadgeState(activeLibraryBadge.id, iconId)
+                    },
+                    onUpdateSize = { newSize ->
+                        viewModel.updateFloatingBadgeSize(activeLibraryBadge.id, newSize)
+                    },
+                    onDuplicate = {
+                        val dupId = viewModel.duplicateFloatingBadge(activeLibraryBadge.id)
+                        if (dupId != null) libraryTargetBadgeId = dupId
+                    },
+                    onToggleLock = {
+                        viewModel.toggleFloatingBadgeLock(activeLibraryBadge.id)
+                    },
+                    onHide = {
+                        viewModel.toggleFloatingBadgeVisibility(activeLibraryBadge.id)
+                    },
+                    onDelete = {
+                        viewModel.deleteFloatingBadge(activeLibraryBadge.id)
+                    },
+                    onOpenFullStudio = {
+                        viewModel.playSound("enter")
+                        initialSettingsFolder = "characterBadge"
+                        showSettings = true
+                    },
+                    onDismiss = {
+                        viewModel.playSound("exit")
+                        libraryTargetBadgeId = null
+                    }
+                )
+            }
 
             // Task Editor Modal Sheet
             if (showTaskEditor) {

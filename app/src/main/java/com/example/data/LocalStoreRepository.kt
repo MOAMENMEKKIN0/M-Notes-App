@@ -599,6 +599,19 @@ class LocalStoreRepository(private val context: Context) {
         )
     }
 
+    suspend fun saveFloatingBadges(badges: List<FloatingBadgeItem>): Result<Unit> = runWorkspaceEdit { state ->
+        state.copy(
+            floatingBadgesInitialized = true,
+            floatingBadges = badges.map { b ->
+                b.copy(
+                    xFraction = b.xFraction.coerceIn(0f, 1f),
+                    yFraction = b.yFraction.coerceIn(0f, 1f),
+                    sizeDp = b.sizeDp.coerceIn(26f, 180f)
+                )
+            }
+        )
+    }
+
     suspend fun restoreFromSnapshot(snapshot: BackupSnapshotPayload): Result<Unit> = runWorkspaceEdit { state ->
         val p = snapshot.preferences
         val normalizedPrefs = p.copy(
