@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -28,12 +29,24 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.absoluteOffset
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AddPhotoAlternate
 import androidx.compose.material.icons.rounded.CalendarMonth
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.ExpandLess
+import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.Mood
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -42,6 +55,8 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -49,6 +64,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -57,21 +73,26 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.localization.AppStrings
 import com.example.model.LibraryPhoto
 import com.example.model.MNotesCatalog
 import com.example.model.RepeatMode
+import com.example.model.SmartIconSettings
 import com.example.model.SmartTask
+import com.example.model.SmartTaskBadgeResolver
 import com.example.model.TrimmedRingtone
 import com.example.ui.theme.LocalMNotesColors
 import java.time.LocalDate
 import java.util.Calendar
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -81,6 +102,7 @@ fun TaskEditorSheet(
     lang: String,
     libraryPhotos: List<LibraryPhoto>,
     trimmedRingtones: List<TrimmedRingtone>,
+    smartIconSettings: SmartIconSettings = SmartIconSettings(),
     onPreviewRingtone: (String) -> Unit,
     onPickAndCropPhoto: (Uri) -> Unit,
     onSelectDraftImg: (String) -> Unit,
@@ -95,13 +117,20 @@ fun TaskEditorSheet(
         alertEnabled: Boolean,
         imgUri: String,
         ringId: String,
-        testAlertAfterSave: Boolean
+        testAlertAfterSave: Boolean,
+        badgeIconId: String,
+        badgeVisible: Boolean,
+        badgeSizeDp: Float,
+        badgeCategory: String,
+        badgeSmartMode: String
     ) -> Unit,
     onDismiss: () -> Unit
 ) {
     val colors = LocalMNotesColors.current
     val context = LocalContext.current
+    val density = LocalDensity.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val safeDismisser = rememberSafeSheetDismisser(sheetState, onDismiss)
 
     var title by remember(editingTask?.id) { mutableStateOf(editingTask?.title ?: "") }
     var meta by remember(editingTask?.id) { mutableStateOf(editingTask?.meta ?: "") }
@@ -123,6 +152,19 @@ fun TaskEditorSheet(
     var alertEnabled by remember(editingTask?.id) { mutableStateOf(editingTask?.alertEnabled ?: true) }
     var selectedRingId by remember(editingTask?.id) { mutableStateOf(editingTask?.ringId ?: "") }
 
+    // Per-Task Circle Floating Icon & Smart Behavior State
+    var badgeIconId by remember(editingTask?.id) { mutableStateOf(editingTask?.badgeIconId ?: "") }
+    var badgeVisible by remember(editingTask?.id) { mutableStateOf(editingTask?.badgeVisible ?: true) }
+    var badgeSizeDp by remember(editingTask?.id) { mutableFloatStateOf((editingTask?.badgeSizeDp ?: 28f).coerceIn(20f, 96f)) }
+    var badgeCategory by remember(editingTask?.id) { mutableStateOf(editingTask?.badgeCategory?.ifBlank { "auto" } ?: "auto") }
+    var badgeSmartMode by remember(editingTask?.id) { mutableStateOf(editingTask?.badgeSmartMode?.ifBlank { "manual" } ?: "manual") }
+    var showBadgePicker by remember { mutableStateOf(false) }
+    var badgeFilterCat by remember { mutableStateOf("all") }
+    var badgeQuery by remember { mutableStateOf("") }
+    val filteredBadgeIcons = remember(badgeFilterCat, badgeQuery) {
+        FloatingBadgeCatalog.filter(badgeFilterCat, badgeQuery)
+    }
+
     val photoLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri ->
@@ -130,10 +172,11 @@ fun TaskEditorSheet(
     }
 
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { safeDismisser.onSystemDismiss() },
         sheetState = sheetState,
         containerColor = colors.bgMain,
-        shape = RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp)
+        shape = RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp),
+        contentWindowInsets = { WindowInsets(0, 0, 0, 0) }
     ) {
         Column(
             modifier = Modifier
@@ -154,7 +197,7 @@ fun TaskEditorSheet(
                     fontWeight = FontWeight.ExtraBold
                 )
                 Button(
-                    onClick = onDismiss,
+                    onClick = { safeDismisser.dismiss() },
                     shape = CircleShape,
                     colors = ButtonDefaults.buttonColors(containerColor = colors.primary)
                 ) {
@@ -767,21 +810,393 @@ fun TaskEditorSheet(
 
                     Spacer(Modifier.height(14.dp))
 
+                    // Dedicated Task Circle Floating Icon & Smart Behavior Section
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = colors.bgMain,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.2.dp, colors.primary.copy(alpha = 0.35f), RoundedCornerShape(16.dp))
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { showBadgePicker = !showBadgePicker }
+                                    .testTag("task_editor_badge_section_toggle"),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                // Live mini preview of THIS task circle + its chosen small icon
+                                Box(
+                                    modifier = Modifier
+                                        .size(56.dp)
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(colors.cardBg)
+                                        .border(1.dp, colors.borderSoft, RoundedCornerShape(14.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    MediaAvatarSlot(
+                                        imgUri = draftImgUri,
+                                        size = 38.dp,
+                                        shapeId = "circle",
+                                        useBannerDefaultIfBlank = false,
+                                        contentDescription = null
+                                    )
+                                    val previewIcon = SmartTaskBadgeResolver.resolveTaskBadgeIconId(
+                                        task = SmartTask(
+                                            title = title,
+                                            repeatMode = repeatMode.wire,
+                                            weekDays = selectedDays,
+                                            badgeIconId = badgeIconId,
+                                            badgeVisible = badgeVisible,
+                                            badgeCategory = badgeCategory,
+                                            badgeSmartMode = badgeSmartMode
+                                        ),
+                                        settings = smartIconSettings
+                                    )
+                                    if (!previewIcon.isNullOrBlank()) {
+                                        val pxX = with(density) { 14.dp.toPx() }
+                                        val pxY = with(density) { (-12).dp.toPx() }
+                                        Box(
+                                            modifier = Modifier.absoluteOffset {
+                                                IntOffset(pxX.roundToInt(), pxY.roundToInt())
+                                            }
+                                        ) {
+                                            FloatingBadgeVisual(
+                                                iconId = previewIcon,
+                                                sizeDp = badgeSizeDp.coerceIn(20f, 30f),
+                                                contentDescription = null
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                    ) {
+                                        Icon(Icons.Rounded.Mood, contentDescription = null, tint = colors.primary, modifier = Modifier.size(15.dp))
+                                        Text(
+                                            text = if (lang == "en") "Task Circle Floating Icon" else "أيقونة دائرة المهمة الصغيرة",
+                                            color = colors.textDark,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.ExtraBold
+                                        )
+                                    }
+                                    val chosenLabel = if (badgeIconId.isNotBlank()) {
+                                        val spec = FloatingBadgeCatalog.byId(badgeIconId)
+                                        if (lang == "en") "${spec.nameEn} • ${badgeSizeDp.roundToInt()}dp" else "${spec.nameAr} • ${badgeSizeDp.roundToInt()}"
+                                    } else {
+                                        if (lang == "en") "Tap to choose from 110+ icons" else "اضغط للاختيار من 110+ أيقونة"
+                                    }
+                                    Text(
+                                        text = chosenLabel,
+                                        color = colors.textMuted,
+                                        fontSize = 10.5.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+
+                                Icon(
+                                    imageVector = if (showBadgePicker) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
+                                    contentDescription = null,
+                                    tint = colors.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+
+                            if (showBadgePicker) {
+                                // Show/Hide + Remove controls
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Text(
+                                            text = if (lang == "en") "Show on circle" else "إظهار على الدائرة",
+                                            color = colors.textDark,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Switch(
+                                            checked = badgeVisible,
+                                            onCheckedChange = { badgeVisible = it },
+                                            colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = colors.primary)
+                                        )
+                                    }
+                                    if (badgeIconId.isNotBlank()) {
+                                        Text(
+                                            text = if (lang == "en") "Remove Icon" else "إزالة الأيقونة",
+                                            color = Color(0xFFEF4444),
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .clickable {
+                                                    badgeIconId = ""
+                                                    badgeVisible = false
+                                                }
+                                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                }
+
+                                // Size slider
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = if (lang == "en") "Size" else "الحجم",
+                                        color = colors.textMuted,
+                                        fontSize = 10.5.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "${badgeSizeDp.roundToInt()} dp",
+                                        color = colors.primary,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.ExtraBold
+                                    )
+                                }
+                                Slider(
+                                    value = badgeSizeDp.coerceIn(20f, 96f),
+                                    onValueChange = { badgeSizeDp = it },
+                                    valueRange = 20f..96f,
+                                    colors = SliderDefaults.colors(thumbColor = colors.primary, activeTrackColor = colors.primary),
+                                    modifier = Modifier.height(26.dp)
+                                )
+
+                                // Smart Mode pills
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                ) {
+                                    SmartTaskBadgeResolver.smartModeOptions.forEach { mode ->
+                                        val sel = badgeSmartMode == mode.id
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(999.dp))
+                                                .background(if (sel) colors.primary else colors.cardBg)
+                                                .border(1.dp, if (sel) colors.primary else colors.borderSoft, RoundedCornerShape(999.dp))
+                                                .clickable { badgeSmartMode = mode.id }
+                                                .padding(horizontal = 9.dp, vertical = 5.dp)
+                                        ) {
+                                            Text(
+                                                text = if (lang == "en") mode.nameEn else mode.nameAr,
+                                                color = if (sel) Color.White else colors.textDark,
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // Activity Category pills
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                ) {
+                                    SmartTaskBadgeResolver.taskCategoryOptions.forEach { cat ->
+                                        val sel = badgeCategory == cat.id
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(999.dp))
+                                                .background(if (sel) colors.primarySoft else colors.cardBg)
+                                                .border(1.dp, if (sel) colors.primary else colors.borderSoft, RoundedCornerShape(999.dp))
+                                                .clickable { badgeCategory = cat.id }
+                                                .padding(horizontal = 9.dp, vertical = 5.dp)
+                                        ) {
+                                            Text(
+                                                text = if (lang == "en") cat.nameEn else cat.nameAr,
+                                                color = if (sel) colors.primary else colors.textDark,
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // Search & Category Filter for 110+ Library
+                                OutlinedTextField(
+                                    value = badgeQuery,
+                                    onValueChange = { badgeQuery = it },
+                                    singleLine = true,
+                                    placeholder = {
+                                        Text(
+                                            text = if (lang == "en") "Search 110+ icons (gym, sleep, food...)" else "ابحث بين 110+ أيقونة (جيم، نوم، أكل...)",
+                                            fontSize = 11.sp
+                                        )
+                                    },
+                                    leadingIcon = {
+                                        Icon(Icons.Rounded.Search, contentDescription = null, tint = colors.textMuted, modifier = Modifier.size(16.dp))
+                                    },
+                                    trailingIcon = {
+                                        if (badgeQuery.isNotEmpty()) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Close,
+                                                contentDescription = null,
+                                                tint = colors.textMuted,
+                                                modifier = Modifier
+                                                    .size(16.dp)
+                                                    .clickable { badgeQuery = "" }
+                                            )
+                                        }
+                                    },
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = colors.primary,
+                                        unfocusedBorderColor = colors.borderSoft,
+                                        focusedContainerColor = colors.cardBg,
+                                        unfocusedContainerColor = colors.cardBg
+                                    ),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                ) {
+                                    FloatingBadgeCatalog.categories.forEach { cat ->
+                                        val sel = badgeFilterCat == cat.id
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(999.dp))
+                                                .background(if (sel) colors.primary else colors.cardBg)
+                                                .border(1.dp, if (sel) colors.primary else colors.borderSoft, RoundedCornerShape(999.dp))
+                                                .clickable { badgeFilterCat = cat.id }
+                                                .padding(horizontal = 9.dp, vertical = 5.dp)
+                                        ) {
+                                            Text(
+                                                text = if (lang == "en") cat.nameEn else cat.nameAr,
+                                                color = if (sel) Color.White else colors.textDark,
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                }
+
+                                LazyVerticalGrid(
+                                    columns = GridCells.Fixed(4),
+                                    contentPadding = PaddingValues(vertical = 4.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(220.dp)
+                                ) {
+                                    items(filteredBadgeIcons, key = { it.id }) { spec ->
+                                        val isSel = badgeIconId == spec.id
+                                        Column(
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            verticalArrangement = Arrangement.spacedBy(3.dp),
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(if (isSel) colors.primarySoft else colors.cardBg)
+                                                .border(
+                                                    if (isSel) 1.6.dp else 1.dp,
+                                                    if (isSel) colors.primary else colors.borderSoft,
+                                                    RoundedCornerShape(12.dp)
+                                                )
+                                                .clickable {
+                                                    badgeIconId = spec.id
+                                                    badgeVisible = true
+                                                    badgeSmartMode = "manual"
+                                                }
+                                                .padding(top = 8.dp, bottom = 5.dp, start = 2.dp, end = 2.dp)
+                                                .testTag("task_editor_pick_icon_${spec.id}")
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                FloatingBadgeVisual(iconId = spec.id, sizeDp = 34f, contentDescription = null)
+                                                if (isSel) {
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .align(Alignment.BottomEnd)
+                                                            .size(14.dp)
+                                                            .clip(CircleShape)
+                                                            .background(colors.primary)
+                                                            .border(1.dp, Color.White, CircleShape),
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        Icon(Icons.Rounded.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(9.dp))
+                                                    }
+                                                }
+                                            }
+                                            Text(
+                                                text = if (lang == "en") spec.nameEn else spec.nameAr,
+                                                color = if (isSel) colors.primary else colors.textDark,
+                                                fontSize = 8.5.sp,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                textAlign = TextAlign.Center
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Button(
+                                    onClick = { showBadgePicker = false },
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(40.dp)
+                                        .testTag("task_editor_apply_icon_btn")
+                                ) {
+                                    Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(5.dp))
+                                    Text(
+                                        text = if (lang == "en") "Apply Icon" else "تطبيق الأيقونة",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.ExtraBold
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(14.dp))
+
                     Button(
                         onClick = {
-                            onSave(
-                                title,
-                                meta,
-                                startDate,
-                                alertTime,
-                                repeatMode,
-                                cycleStepsRaw,
-                                selectedDays,
-                                alertEnabled,
-                                draftImgUri,
-                                selectedRingId,
-                                false
-                            )
+                            safeDismisser.dismissWith {
+                                onSave(
+                                    title,
+                                    meta,
+                                    startDate,
+                                    alertTime,
+                                    repeatMode,
+                                    cycleStepsRaw,
+                                    selectedDays,
+                                    alertEnabled,
+                                    draftImgUri,
+                                    selectedRingId,
+                                    false,
+                                    badgeIconId,
+                                    badgeVisible,
+                                    badgeSizeDp,
+                                    badgeCategory,
+                                    badgeSmartMode
+                                )
+                            }
                         },
                         enabled = title.trim().isNotEmpty(),
                         shape = RoundedCornerShape(14.dp),
@@ -802,19 +1217,26 @@ fun TaskEditorSheet(
                         Spacer(Modifier.height(8.dp))
                         OutlinedButton(
                             onClick = {
-                                onSave(
-                                    title,
-                                    meta,
-                                    startDate,
-                                    alertTime,
-                                    repeatMode,
-                                    cycleStepsRaw,
-                                    selectedDays,
-                                    alertEnabled,
-                                    draftImgUri,
-                                    selectedRingId,
-                                    true
-                                )
+                                safeDismisser.dismissWith {
+                                    onSave(
+                                        title,
+                                        meta,
+                                        startDate,
+                                        alertTime,
+                                        repeatMode,
+                                        cycleStepsRaw,
+                                        selectedDays,
+                                        alertEnabled,
+                                        draftImgUri,
+                                        selectedRingId,
+                                        true,
+                                        badgeIconId,
+                                        badgeVisible,
+                                        badgeSizeDp,
+                                        badgeCategory,
+                                        badgeSmartMode
+                                    )
+                                }
                             },
                             enabled = title.trim().isNotEmpty(),
                             shape = RoundedCornerShape(14.dp),

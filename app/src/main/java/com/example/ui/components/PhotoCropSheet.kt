@@ -3,7 +3,6 @@ package com.example.ui.components
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -17,6 +16,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -50,7 +50,6 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -72,7 +71,6 @@ import com.example.model.LibraryPhoto
 import com.example.model.MNotesCatalog
 import com.example.ui.theme.LocalMNotesColors
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
@@ -88,17 +86,21 @@ fun PhotoPickerSheet(
 ) {
     val colors = LocalMNotesColors.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val safeDismisser = rememberSafeSheetDismisser(sheetState, onDismiss)
     val photoLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri ->
-        if (uri != null) onPickFromDevice(uri)
+        if (uri != null) {
+            safeDismisser.dismissWith { onPickFromDevice(uri) }
+        }
     }
 
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { safeDismisser.onSystemDismiss() },
         sheetState = sheetState,
         containerColor = colors.bgMain,
-        shape = RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp)
+        shape = RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp),
+        contentWindowInsets = { WindowInsets(0, 0, 0, 0) }
     ) {
         Column(
             modifier = Modifier
@@ -119,7 +121,7 @@ fun PhotoPickerSheet(
                     fontWeight = FontWeight.ExtraBold
                 )
                 Button(
-                    onClick = onDismiss,
+                    onClick = { safeDismisser.dismiss() },
                     shape = RoundedCornerShape(999.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = colors.primary)
                 ) {
@@ -186,7 +188,7 @@ fun PhotoPickerSheet(
                         columns = 3,
                         defaultCategory = "gym",
                         showLabels = true,
-                        onSelectUri = onSelectFromLibrary
+                        onSelectUri = { uri -> safeDismisser.dismissWith { onSelectFromLibrary(uri) } }
                     )
 
                     val enabledPhotos = libraryPhotos.filter { it.enabled }
@@ -212,7 +214,7 @@ fun PhotoPickerSheet(
                                                 .aspectRatio(1f)
                                                 .clip(CircleShape)
                                                 .border(1.5.dp, colors.borderSoft, CircleShape)
-                                                .clickable { onSelectFromLibrary(item.filePath) }
+                                                .clickable { safeDismisser.dismissWith { onSelectFromLibrary(item.filePath) } }
                                                 .padding(2.dp)
                                         ) {
                                             MNotesPhotoContent(
@@ -247,11 +249,10 @@ fun PhotoCropSheet(
     onCropConfirmed: suspend (offsetXNorm: Float, offsetYNorm: Float, scale: Float, rotationDeg: Int) -> Unit,
     onDismiss: () -> Unit
 ) {
-    BackHandler(onBack = onDismiss)
     val colors = LocalMNotesColors.current
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val safeDismisser = rememberSafeSheetDismisser(sheetState, onDismiss)
 
     var previewBitmap by remember(sourceUri) { mutableStateOf<Bitmap?>(null) }
     var scale by remember { mutableFloatStateOf(1f) }
@@ -273,10 +274,11 @@ fun PhotoCropSheet(
     }
 
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { safeDismisser.onSystemDismiss() },
         sheetState = sheetState,
         containerColor = colors.bgMain,
-        shape = RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp)
+        shape = RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp),
+        contentWindowInsets = { WindowInsets(0, 0, 0, 0) }
     ) {
         Column(
             modifier = Modifier
@@ -297,7 +299,7 @@ fun PhotoCropSheet(
                     fontWeight = FontWeight.ExtraBold
                 )
                 OutlinedButton(
-                    onClick = onDismiss,
+                    onClick = { safeDismisser.dismiss() },
                     shape = RoundedCornerShape(999.dp)
                 ) {
                     Text(AppStrings.get(lang, "cancel"), fontSize = 12.sp, fontWeight = FontWeight.Bold)
@@ -408,10 +410,10 @@ fun PhotoCropSheet(
                             isSaving = true
                             val normX = if (stagePx > 0f) offsetX / stagePx else 0f
                             val normY = if (stagePx > 0f) offsetY / stagePx else 0f
-                            scope.launch {
-                                onCropConfirmed(normX, normY, scale, rotationDeg)
-                                isSaving = false
-                            }
+                            safeDismisser.dismissWithSuspend(
+                                action = { onCropConfirmed(normX, normY, scale, rotationDeg) },
+                                onFinally = { isSaving = false }
+                            )
                         },
                         enabled = !isSaving,
                         shape = RoundedCornerShape(14.dp),

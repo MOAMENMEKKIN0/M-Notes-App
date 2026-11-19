@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -67,6 +68,7 @@ fun HomeQuickOverviewSheet(
     val colors = LocalMNotesColors.current
     val textScale = LocalMNotesTextScale.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val safeDismisser = rememberSafeSheetDismisser(sheetState, onDismiss)
     val dayNames = AppStrings.dayNames(lang)
 
     val displayedTasks = if (selectedDayFilter != null) {
@@ -81,10 +83,11 @@ fun HomeQuickOverviewSheet(
     }
 
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { safeDismisser.onSystemDismiss() },
         sheetState = sheetState,
         containerColor = colors.bgMain,
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        contentWindowInsets = { WindowInsets(0, 0, 0, 0) }
     ) {
         Column(
             modifier = Modifier
@@ -122,7 +125,7 @@ fun HomeQuickOverviewSheet(
                         .clip(CircleShape)
                         .background(colors.cardBg)
                         .border(1.dp, colors.borderSoft, CircleShape)
-                        .clickable(onClick = onDismiss),
+                        .clickable { safeDismisser.dismiss() },
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(Icons.Rounded.Close, contentDescription = "Close", tint = colors.textMuted, modifier = Modifier.size(18.dp))
@@ -142,8 +145,7 @@ fun HomeQuickOverviewSheet(
                         .border(1.dp, colors.primary.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
                         .clip(RoundedCornerShape(16.dp))
                         .clickable {
-                            onDismiss()
-                            onOpenHomeSettings()
+                            safeDismisser.dismiss { onOpenHomeSettings() }
                         }
                 ) {
                     Row(
@@ -169,8 +171,7 @@ fun HomeQuickOverviewSheet(
                         .border(1.dp, colors.borderSoft, RoundedCornerShape(16.dp))
                         .clip(RoundedCornerShape(16.dp))
                         .clickable {
-                            onDismiss()
-                            onOpenRequestsPage()
+                            safeDismisser.dismiss { onOpenRequestsPage() }
                         }
                 ) {
                     Row(
@@ -214,8 +215,7 @@ fun HomeQuickOverviewSheet(
                                 .fillMaxWidth()
                                 .border(1.dp, colors.borderSoft, RoundedCornerShape(16.dp))
                                 .clickable {
-                                    onDismiss()
-                                    onEditTask(task)
+                                    safeDismisser.dismiss { onEditTask(task) }
                                 }
                         ) {
                             Row(
@@ -260,8 +260,7 @@ fun HomeQuickOverviewSheet(
                                         .clip(CircleShape)
                                         .background(colors.primarySoft)
                                         .clickable {
-                                            onDismiss()
-                                            onPreviewAlert(task)
+                                            safeDismisser.dismiss { onPreviewAlert(task) }
                                         },
                                     contentAlignment = Alignment.Center
                                 ) {
@@ -274,8 +273,7 @@ fun HomeQuickOverviewSheet(
                                         .background(colors.bgMain)
                                         .border(1.dp, colors.borderSoft, CircleShape)
                                         .clickable {
-                                            onDismiss()
-                                            onEditTask(task)
+                                            safeDismisser.dismiss { onEditTask(task) }
                                         },
                                     contentAlignment = Alignment.Center
                                 ) {
@@ -289,8 +287,7 @@ fun HomeQuickOverviewSheet(
 
             Button(
                 onClick = {
-                    onDismiss()
-                    onAddTask()
+                    safeDismisser.dismiss { onAddTask() }
                 },
                 shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = colors.primary),

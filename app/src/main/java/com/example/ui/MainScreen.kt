@@ -66,6 +66,7 @@ import com.example.ui.components.PhotoCropSheet
 import com.example.ui.components.PhotoPickerSheet
 import com.example.ui.components.RequestsWorkspace
 import com.example.ui.components.SettingsSheet
+import com.example.ui.components.TaskBadgeLibrarySheet
 import com.example.ui.components.TaskEditorSheet
 import com.example.ui.components.TasksWorkspaceRouter
 import com.example.ui.components.TopBarSwitcher
@@ -100,6 +101,7 @@ fun MainScreen(viewModel: MNotesViewModel) {
     val activeAlertTask by viewModel.activeAlertTask.collectAsStateWithLifecycle()
     val isBusyBackup by viewModel.isBusyBackup.collectAsStateWithLifecycle()
     val floatingBadges by viewModel.floatingBadges.collectAsStateWithLifecycle()
+    val smartIconSettings by viewModel.smartIconSettings.collectAsStateWithLifecycle()
 
     val colors = LocalMNotesColors.current
     val textScale = LocalMNotesTextScale.current
@@ -124,6 +126,7 @@ fun MainScreen(viewModel: MNotesViewModel) {
     var cropSourceUri by remember { mutableStateOf<Uri?>(null) }
     var cropDestination by remember { mutableStateOf<CropDestination?>(null) }
     var libraryTargetBadgeId by remember { mutableStateOf<String?>(null) }
+    var taskBadgeLibraryTaskId by remember { mutableStateOf<String?>(null) }
 
     // Observe transient toast messages
     LaunchedEffect(Unit) {
@@ -286,6 +289,7 @@ fun MainScreen(viewModel: MNotesViewModel) {
                                 TasksWorkspaceRouter(
                                     prefs = prefs,
                                     allTasks = allTasks,
+                                    smartIconSettings = smartIconSettings,
                                     requestsCount = allRequests.size,
                                     tasksState = tasksState,
                                     searchQuery = searchQuery,
@@ -317,6 +321,13 @@ fun MainScreen(viewModel: MNotesViewModel) {
                                     },
                                     onTaskDeleteClick = { taskId ->
                                         viewModel.deleteTask(taskId)
+                                    },
+                                    onTaskBadgeTap = { tappedTask ->
+                                        viewModel.playSound("enter")
+                                        taskBadgeLibraryTaskId = tappedTask.id
+                                    },
+                                    onTaskBadgeDrag = { taskId, offsetX, offsetY ->
+                                        viewModel.updateTaskBadgePosition(taskId, offsetX, offsetY)
                                     },
                                     onPreviewTaskAlert = { task ->
                                         viewModel.showAlert(task, previewOnly = true)
@@ -407,6 +418,47 @@ fun MainScreen(viewModel: MNotesViewModel) {
                 )
             }
 
+            // Dedicated Task Circle Floating Icon Library Sheet (opened when tapping a task circle's small icon)
+            val activeTaskBadgeTarget = taskBadgeLibraryTaskId?.let { targetId ->
+                allTasks.firstOrNull { it.id == targetId }
+            }
+            if (activeTaskBadgeTarget != null) {
+                TaskBadgeLibrarySheet(
+                    task = activeTaskBadgeTarget,
+                    smartIconSettings = smartIconSettings,
+                    lang = lang,
+                    onApply = { iconId, sizeDp, offsetX, offsetY, category, smartMode, locked ->
+                        viewModel.applyTaskBadge(
+                            taskId = activeTaskBadgeTarget.id,
+                            iconId = iconId,
+                            offsetX = offsetX,
+                            offsetY = offsetY,
+                            sizeDp = sizeDp,
+                            visible = true,
+                            category = category,
+                            smartMode = smartMode,
+                            locked = locked
+                        )
+                        taskBadgeLibraryTaskId = null
+                    },
+                    onHide = {
+                        viewModel.toggleTaskBadgeVisibility(activeTaskBadgeTarget.id)
+                    },
+                    onRemove = {
+                        viewModel.removeTaskBadge(activeTaskBadgeTarget.id)
+                    },
+                    onOpenFullStudio = {
+                        viewModel.playSound("enter")
+                        initialSettingsFolder = "characterBadge"
+                        showSettings = true
+                    },
+                    onDismiss = {
+                        viewModel.playSound("exit")
+                        taskBadgeLibraryTaskId = null
+                    }
+                )
+            }
+
             // Task Editor Modal Sheet
             if (showTaskEditor) {
                 TaskEditorSheet(
@@ -415,6 +467,7 @@ fun MainScreen(viewModel: MNotesViewModel) {
                     lang = lang,
                     libraryPhotos = libraryPhotos,
                     trimmedRingtones = trimmedRingtones,
+                    smartIconSettings = smartIconSettings,
                     onPreviewRingtone = { ringId -> viewModel.previewRingtoneId(ringId) },
                     onPickAndCropPhoto = { uri ->
                         cropDestination = CropDestination.EditorDraft
@@ -424,7 +477,7 @@ fun MainScreen(viewModel: MNotesViewModel) {
                         viewModel.playSound("nav")
                         editorDraftImgUri = path
                     },
-                    onSave = { title, meta, startDate, alertTime, repeatMode, cycleRaw, weekDays, alertEnabled, imgUri, ringId, testAlert ->
+                    onSave = { title, meta, startDate, alertTime, repeatMode, cycleRaw, weekDays, alertEnabled, imgUri, ringId, testAlert, badgeIconId, badgeVisible, badgeSizeDp, badgeCategory, badgeSmartMode ->
                         viewModel.saveTask(
                             editingTask = editingTask,
                             title = title,
@@ -437,7 +490,12 @@ fun MainScreen(viewModel: MNotesViewModel) {
                             alertEnabled = alertEnabled,
                             imgUri = imgUri,
                             ringId = ringId,
-                            triggerAlertAfterSave = testAlert
+                            triggerAlertAfterSave = testAlert,
+                            badgeIconId = badgeIconId,
+                            badgeVisible = badgeVisible,
+                            badgeSizeDp = badgeSizeDp,
+                            badgeCategory = badgeCategory,
+                            badgeSmartMode = badgeSmartMode
                         )
                         showTaskEditor = false
                     },

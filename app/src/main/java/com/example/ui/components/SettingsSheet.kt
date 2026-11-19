@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -145,8 +146,10 @@ fun SettingsSheet(
     val scope = rememberCoroutineScope()
     val credentialManager = remember(context) { CredentialManager.create(context) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val safeDismisser = rememberSafeSheetDismisser(sheetState, onDismiss)
     val connectedEmail by viewModel.connectedEmail.collectAsStateWithLifecycle()
     val floatingBadges by viewModel.floatingBadges.collectAsStateWithLifecycle()
+    val smartIconSettings by viewModel.smartIconSettings.collectAsStateWithLifecycle()
     val lastBackupStatus by viewModel.lastBackupStatus.collectAsStateWithLifecycle()
     val lastBackupError by viewModel.lastBackupError.collectAsStateWithLifecycle()
 
@@ -270,10 +273,11 @@ fun SettingsSheet(
     var demoTopPage by remember { mutableIntStateOf(0) }
 
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { safeDismisser.onSystemDismiss() },
         sheetState = sheetState,
         containerColor = colors.bgMain,
-        shape = RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp)
+        shape = RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp),
+        contentWindowInsets = { WindowInsets(0, 0, 0, 0) }
     ) {
         Column(
             modifier = Modifier
@@ -297,7 +301,7 @@ fun SettingsSheet(
                 Button(
                     onClick = {
                         viewModel.playSound("done")
-                        onDismiss()
+                        safeDismisser.dismiss()
                     },
                     shape = RoundedCornerShape(999.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
@@ -2129,11 +2133,13 @@ fun SettingsSheet(
                 }
             ) {
                 FloatingBadgeSettingsFolderContent(
+                    tasks = tasks,
+                    smartIconSettings = smartIconSettings,
                     badges = floatingBadges,
                     prefs = prefs,
-                    sampleTask = tasks.firstOrNull(),
                     lang = lang,
-                    viewModel = viewModel
+                    viewModel = viewModel,
+                    onAppliedAndClose = { safeDismisser.dismiss() }
                 )
             }
 

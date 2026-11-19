@@ -17,6 +17,7 @@ import com.example.model.FloatingBadgeItem
 import com.example.model.LibraryPhoto
 import com.example.model.QuickRequest
 import com.example.model.RepeatMode
+import com.example.model.SmartIconSettings
 import com.example.model.SmartTask
 import com.example.model.TrimmedRingtone
 import com.example.model.UserPreferences
@@ -117,10 +118,16 @@ class MNotesViewModel(
     private val _floatingBadges = MutableStateFlow<List<FloatingBadgeItem>>(emptyList())
     val floatingBadges: StateFlow<List<FloatingBadgeItem>> = _floatingBadges.asStateFlow()
 
+    private val _smartIconSettings = MutableStateFlow(SmartIconSettings())
+    val smartIconSettings: StateFlow<SmartIconSettings> = _smartIconSettings.asStateFlow()
+
     private var badgePersistJob: Job? = null
+    private var taskBadgeDragPersistJob: Job? = null
     private var autoBackupDebounceJob: Job? = null
     @Volatile
     private var lastBadgeMutationAtMs: Long = 0L
+    @Volatile
+    private var lastSmartSettingsMutationAtMs: Long = 0L
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
@@ -154,6 +161,14 @@ class MNotesViewModel(
                 val now = System.currentTimeMillis()
                 if (now - lastBadgeMutationAtMs > 450L || _floatingBadges.value.isEmpty()) {
                     _floatingBadges.value = stored
+                }
+            }
+        }
+        viewModelScope.launch {
+            localStore.smartIconSettingsFlow.collect { stored ->
+                val now = System.currentTimeMillis()
+                if (now - lastSmartSettingsMutationAtMs > 350L) {
+                    _smartIconSettings.value = stored
                 }
             }
         }
@@ -398,7 +413,15 @@ class MNotesViewModel(
         alertEnabled: Boolean,
         imgUri: String,
         ringId: String = "",
-        triggerAlertAfterSave: Boolean = false
+        triggerAlertAfterSave: Boolean = false,
+        badgeIconId: String? = null,
+        badgeVisible: Boolean? = null,
+        badgeOffsetX: Float? = null,
+        badgeOffsetY: Float? = null,
+        badgeSizeDp: Float? = null,
+        badgeCategory: String? = null,
+        badgeSmartMode: String? = null,
+        badgeLocked: Boolean? = null
     ) {
         val cleanTitle = title.trim()
         if (cleanTitle.isEmpty()) return
@@ -434,6 +457,9 @@ class MNotesViewModel(
             metaInput.trim().ifBlank { cleanTitle }
         }
 
+        val resolvedBadgeIconId = badgeIconId ?: (editingTask?.badgeIconId ?: "")
+        val resolvedBadgeVisible = badgeVisible ?: (editingTask?.badgeVisible ?: true)
+
         val payload = SmartTask(
             id = editingTask?.id ?: "",
             userId = "local",
@@ -449,7 +475,15 @@ class MNotesViewModel(
             nextDueDate = finalDate,
             lastAlertedDate = "",
             ringId = ringId,
-            sortOrder = editingTask?.sortOrder ?: System.currentTimeMillis()
+            sortOrder = editingTask?.sortOrder ?: System.currentTimeMillis(),
+            badgeIconId = resolvedBadgeIconId,
+            badgeVisible = resolvedBadgeVisible,
+            badgeOffsetX = badgeOffsetX ?: (editingTask?.badgeOffsetX ?: 20f),
+            badgeOffsetY = badgeOffsetY ?: (editingTask?.badgeOffsetY ?: -14f),
+            badgeSizeDp = badgeSizeDp ?: (editingTask?.badgeSizeDp ?: 28f),
+            badgeCategory = badgeCategory ?: (editingTask?.badgeCategory ?: "auto"),
+            badgeSmartMode = badgeSmartMode ?: (editingTask?.badgeSmartMode ?: "manual"),
+            badgeLocked = badgeLocked ?: (editingTask?.badgeLocked ?: false)
         )
 
         viewModelScope.launch {
@@ -469,6 +503,153 @@ class MNotesViewModel(
                     runCloudBackup(isAuto = true)
                 }
             }
+        }
+    }
+
+    fun applyTaskBadge(
+        taskId: String,
+        iconId: String,
+        offsetX: Float,
+        offsetY: Float,
+        sizeDp: Float,
+        visible: Boolean = true,
+        category: String? = null,
+        smartMode: String? = null,
+        locked: Boolean? = null,
+        showToast: Boolean = true
+    ) {
+        playSound("done")
+        viewModelScope.launch {
+            val res = localStore.updateTaskBadge(
+                taskId = taskId,
+                iconId = iconId,
+                visible = visible,
+                offsetX = offsetX,
+                offsetY = offsetY,
+                sizeDp = sizeDp,
+                category = category,
+                smartMode = smartMode,
+                locked = locked
+            )
+            if (res.isSuccess) {
+                scheduleDebouncedAutoBackup()
+                if (showToast) {
+                    val lang = preferences.value.lang
+                    _toastMessage.tryEmit(
+                        if (lang == "en") "Icon applied to task circle!"
+                        else "تم تطبيق الأيقونة على دائرة المهمة!"
+                    )
+                }
+            } else {
+                _toastMessage.tryEmit(res.exceptionOrNull()?.localizedMessage ?: "Failed to apply icon")
+            }
+        }
+    }
+
+    fun applyBadgeToAllTasks(
+        iconId: String,
+        offsetX: Float,
+        offsetY: Float,
+        sizeDp: Float,
+        visible: Boolean = true,
+        smartMode: String? = null
+    ) {
+        playSound("done")
+        viewModelScope.launch {
+            val res = localStore.applyBadgeToAllTasks(
+                iconId = iconId,
+                offsetX = offsetX,
+                offsetY = offsetY,
+                sizeDp = sizeDp,
+                visible = visible,
+                smartMode = smartMode
+            )
+            if (res.isSuccess) {
+                scheduleDebouncedAutoBackup()
+                val lang = preferences.value.lang
+                _toastMessage.tryEmit(
+                    if (lang == "en") "Icon applied to all tasks!"
+                    else "تم تطبيق الأيقونة على جميع المهام!"
+                )
+            } else {
+                _toastMessage.tryEmit(res.exceptionOrNull()?.localizedMessage ?: "Failed to apply icon")
+            }
+        }
+    }
+
+    fun updateTaskBadgePosition(taskId: String, offsetX: Float, offsetY: Float) {
+        taskBadgeDragPersistJob?.cancel()
+        taskBadgeDragPersistJob = viewModelScope.launch {
+            localStore.updateTaskBadge(
+                taskId = taskId,
+                offsetX = offsetX,
+                offsetY = offsetY
+            )
+            scheduleDebouncedAutoBackup()
+        }
+    }
+
+    fun updateTaskBadgeSize(taskId: String, sizeDp: Float) {
+        viewModelScope.launch {
+            localStore.updateTaskBadge(taskId = taskId, sizeDp = sizeDp)
+            scheduleDebouncedAutoBackup()
+        }
+    }
+
+    fun updateTaskBadgeIcon(taskId: String, iconId: String) {
+        playSound("nav")
+        viewModelScope.launch {
+            localStore.updateTaskBadge(taskId = taskId, iconId = iconId, visible = true)
+            scheduleDebouncedAutoBackup()
+        }
+    }
+
+    fun toggleTaskBadgeVisibility(taskId: String) {
+        val current = (tasksState.value as? UiState.Success)?.data?.firstOrNull { it.id == taskId } ?: return
+        playSound("nav")
+        viewModelScope.launch {
+            localStore.updateTaskBadge(taskId = taskId, visible = !current.badgeVisible)
+            scheduleDebouncedAutoBackup()
+        }
+    }
+
+    fun toggleTaskBadgeLock(taskId: String) {
+        val current = (tasksState.value as? UiState.Success)?.data?.firstOrNull { it.id == taskId } ?: return
+        playSound("nav")
+        viewModelScope.launch {
+            localStore.updateTaskBadge(taskId = taskId, locked = !current.badgeLocked)
+            scheduleDebouncedAutoBackup()
+        }
+    }
+
+    fun updateTaskBadgeMode(taskId: String, category: String? = null, smartMode: String? = null) {
+        playSound("nav")
+        viewModelScope.launch {
+            localStore.updateTaskBadge(taskId = taskId, category = category, smartMode = smartMode)
+            scheduleDebouncedAutoBackup()
+        }
+    }
+
+    fun removeTaskBadge(taskId: String) {
+        playSound("exit")
+        viewModelScope.launch {
+            localStore.updateTaskBadge(
+                taskId = taskId,
+                iconId = "",
+                visible = false,
+                smartMode = "manual"
+            )
+            scheduleDebouncedAutoBackup()
+        }
+    }
+
+    fun updateSmartIconSettings(transform: (SmartIconSettings) -> SmartIconSettings) {
+        val next = transform(_smartIconSettings.value)
+        lastSmartSettingsMutationAtMs = System.currentTimeMillis()
+        _smartIconSettings.value = next
+        viewModelScope.launch {
+            localStore.saveSmartIconSettings(next)
+            scheduleDebouncedAutoBackup()
         }
     }
 
@@ -887,7 +1068,15 @@ class MNotesViewModel(
                     nextDueDate = it.nextDueDate,
                     lastAlertedDate = it.lastAlertedDate,
                     ringId = it.ringId,
-                    sortOrder = it.sortOrder
+                    sortOrder = it.sortOrder,
+                    badgeIconId = it.badgeIconId,
+                    badgeVisible = it.badgeVisible,
+                    badgeOffsetX = it.badgeOffsetX,
+                    badgeOffsetY = it.badgeOffsetY,
+                    badgeSizeDp = it.badgeSizeDp,
+                    badgeCategory = it.badgeCategory,
+                    badgeSmartMode = it.badgeSmartMode,
+                    badgeLocked = it.badgeLocked
                 )
             },
             requests = requests.map {
@@ -906,7 +1095,8 @@ class MNotesViewModel(
                     isChecklistOrder = it.isChecklistOrder
                 )
             },
-            floatingBadges = floatingBadges.value
+            floatingBadges = floatingBadges.value,
+            smartIconSettings = smartIconSettings.value
         )
     }
 
@@ -920,10 +1110,17 @@ class MNotesViewModel(
                 _toastMessage.tryEmit(AppStrings.get(lang, "invalidFile"))
                 return@launch
             }
+            val snapshot = parsed.getOrThrow()
             _isBusyBackup.value = true
-            val res = localStore.restoreFromSnapshot(parsed.getOrThrow())
+            val res = localStore.restoreFromSnapshot(snapshot)
             _isBusyBackup.value = false
             if (res.isSuccess) {
+                lastSmartSettingsMutationAtMs = 0L
+                _smartIconSettings.value = snapshot.smartIconSettings
+                if (snapshot.floatingBadges.isNotEmpty()) {
+                    lastBadgeMutationAtMs = 0L
+                    _floatingBadges.value = snapshot.floatingBadges
+                }
                 playSound("done")
                 _toastMessage.tryEmit(AppStrings.get(lang, "jsonImported"))
             } else {
@@ -1003,6 +1200,8 @@ class MNotesViewModel(
                             lastBadgeMutationAtMs = 0L
                             _floatingBadges.value = snapshot.floatingBadges
                         }
+                        lastSmartSettingsMutationAtMs = 0L
+                        _smartIconSettings.value = snapshot.smartIconSettings
                         _lastBackupStatus.value = "success"
                         _lastBackupError.value = null
                         playSound("done")

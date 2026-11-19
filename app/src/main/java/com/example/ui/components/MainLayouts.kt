@@ -45,6 +45,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -57,8 +58,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import com.example.localization.AppStrings
 import com.example.model.RepeatMode
+import com.example.model.SmartIconSettings
 import com.example.model.SmartTask
 import com.example.model.UserPreferences
 import com.example.ui.UiState
@@ -82,6 +85,7 @@ private enum class TaskFilter(val id: String) {
 fun TasksWorkspaceRouter(
     prefs: UserPreferences,
     allTasks: List<SmartTask>,
+    smartIconSettings: SmartIconSettings = SmartIconSettings(),
     requestsCount: Int,
     tasksState: UiState<List<SmartTask>>,
     searchQuery: String,
@@ -92,6 +96,8 @@ fun TasksWorkspaceRouter(
     onTaskPhotoClick: (String) -> Unit,
     onTaskEditClick: (SmartTask) -> Unit,
     onTaskDeleteClick: (String) -> Unit,
+    onTaskBadgeTap: (SmartTask) -> Unit = {},
+    onTaskBadgeDrag: (taskId: String, offsetX: Float, offsetY: Float) -> Unit = { _, _, _ -> },
     onPreviewTaskAlert: (SmartTask) -> Unit,
     onOpenOverview: (Int?) -> Unit,
     onOpenRequestsPage: () -> Unit
@@ -138,6 +144,7 @@ fun TasksWorkspaceRouter(
                 prefs = prefs,
                 allTasks = allTasks,
                 dueTasks = dueTasks,
+                smartIconSettings = smartIconSettings,
                 dueTodayTotal = dueTodayTotal,
                 requestsCount = requestsCount,
                 tasksState = tasksState,
@@ -151,6 +158,8 @@ fun TasksWorkspaceRouter(
                 onTaskPhotoClick = onTaskPhotoClick,
                 onTaskEditClick = onTaskEditClick,
                 onTaskDeleteClick = onTaskDeleteClick,
+                onTaskBadgeTap = onTaskBadgeTap,
+                onTaskBadgeDrag = onTaskBadgeDrag,
                 onPreviewTaskAlert = onPreviewTaskAlert,
                 onOpenOverview = onOpenOverview,
                 onOpenRequestsPage = onOpenRequestsPage
@@ -159,6 +168,7 @@ fun TasksWorkspaceRouter(
                 prefs = prefs,
                 allTasks = allTasks,
                 dueTasks = dueTasks,
+                smartIconSettings = smartIconSettings,
                 dueTodayTotal = dueTodayTotal,
                 requestsCount = requestsCount,
                 tasksState = tasksState,
@@ -172,6 +182,8 @@ fun TasksWorkspaceRouter(
                 onTaskPhotoClick = onTaskPhotoClick,
                 onTaskEditClick = onTaskEditClick,
                 onTaskDeleteClick = onTaskDeleteClick,
+                onTaskBadgeTap = onTaskBadgeTap,
+                onTaskBadgeDrag = onTaskBadgeDrag,
                 onPreviewTaskAlert = onPreviewTaskAlert,
                 onOpenOverview = onOpenOverview
             )
@@ -179,6 +191,7 @@ fun TasksWorkspaceRouter(
                 prefs = prefs,
                 allTasks = allTasks,
                 dueTasks = dueTasks,
+                smartIconSettings = smartIconSettings,
                 dueTodayTotal = dueTodayTotal,
                 requestsCount = requestsCount,
                 tasksState = tasksState,
@@ -192,6 +205,8 @@ fun TasksWorkspaceRouter(
                 onTaskPhotoClick = onTaskPhotoClick,
                 onTaskEditClick = onTaskEditClick,
                 onTaskDeleteClick = onTaskDeleteClick,
+                onTaskBadgeTap = onTaskBadgeTap,
+                onTaskBadgeDrag = onTaskBadgeDrag,
                 onPreviewTaskAlert = onPreviewTaskAlert,
                 onOpenOverview = onOpenOverview,
                 onOpenRequestsPage = onOpenRequestsPage
@@ -208,6 +223,7 @@ private fun TasksWorkspaceL1(
     prefs: UserPreferences,
     allTasks: List<SmartTask>,
     dueTasks: List<SmartTask>,
+    smartIconSettings: SmartIconSettings,
     dueTodayTotal: Int,
     requestsCount: Int,
     tasksState: UiState<List<SmartTask>>,
@@ -221,6 +237,8 @@ private fun TasksWorkspaceL1(
     onTaskPhotoClick: (String) -> Unit,
     onTaskEditClick: (SmartTask) -> Unit,
     onTaskDeleteClick: (String) -> Unit,
+    onTaskBadgeTap: (SmartTask) -> Unit,
+    onTaskBadgeDrag: (String, Float, Float) -> Unit,
     onPreviewTaskAlert: (SmartTask) -> Unit,
     onOpenOverview: (Int?) -> Unit,
     onOpenRequestsPage: () -> Unit
@@ -375,11 +393,14 @@ private fun TasksWorkspaceL1(
         TasksListCard(
             prefs = prefs,
             dueTasks = dueTasks,
+            smartIconSettings = smartIconSettings,
             tasksState = tasksState,
             onDuePillClick = { onOpenOverview(null) },
             onTaskPhotoClick = onTaskPhotoClick,
             onTaskEditClick = onTaskEditClick,
-            onTaskDeleteClick = onTaskDeleteClick
+            onTaskDeleteClick = onTaskDeleteClick,
+            onTaskBadgeTap = onTaskBadgeTap,
+            onTaskBadgeDrag = onTaskBadgeDrag
         )
 
         if (prefs.showQuickDock) {
@@ -455,6 +476,7 @@ private fun TasksWorkspaceL2(
     prefs: UserPreferences,
     allTasks: List<SmartTask>,
     dueTasks: List<SmartTask>,
+    smartIconSettings: SmartIconSettings,
     dueTodayTotal: Int,
     requestsCount: Int,
     tasksState: UiState<List<SmartTask>>,
@@ -468,6 +490,8 @@ private fun TasksWorkspaceL2(
     onTaskPhotoClick: (String) -> Unit,
     onTaskEditClick: (SmartTask) -> Unit,
     onTaskDeleteClick: (String) -> Unit,
+    onTaskBadgeTap: (SmartTask) -> Unit,
+    onTaskBadgeDrag: (String, Float, Float) -> Unit,
     onPreviewTaskAlert: (SmartTask) -> Unit,
     onOpenOverview: (Int?) -> Unit,
     onOpenRequestsPage: () -> Unit
@@ -665,15 +689,16 @@ private fun TasksWorkspaceL2(
             }
         }
 
-        // Crisp Rounded Sheet Panel
-        Surface(
-            shape = RoundedCornerShape(26.dp),
-            color = colors.cardBg,
-            shadowElevation = 2.dp,
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(1.dp, colors.borderSoft, RoundedCornerShape(26.dp))
-        ) {
+        // Crisp Rounded Sheet Panel (unclipped outer Box so task badges can drag freely)
+        Box(modifier = Modifier.fillMaxWidth()) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .shadow(2.dp, RoundedCornerShape(26.dp), clip = false)
+                    .clip(RoundedCornerShape(26.dp))
+                    .background(colors.cardBg)
+                    .border(1.dp, colors.borderSoft, RoundedCornerShape(26.dp))
+            )
             Column(
                 modifier = Modifier.padding((14f * cardScale).dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -735,10 +760,13 @@ private fun TasksWorkspaceL2(
                 TasksListInner(
                     prefs = prefs,
                     dueTasks = dueTasks,
+                    smartIconSettings = smartIconSettings,
                     tasksState = tasksState,
                     onTaskPhotoClick = onTaskPhotoClick,
                     onTaskEditClick = onTaskEditClick,
-                    onTaskDeleteClick = onTaskDeleteClick
+                    onTaskDeleteClick = onTaskDeleteClick,
+                    onTaskBadgeTap = onTaskBadgeTap,
+                    onTaskBadgeDrag = onTaskBadgeDrag
                 )
             }
         }
@@ -755,6 +783,7 @@ private fun TasksWorkspaceL3(
     prefs: UserPreferences,
     allTasks: List<SmartTask>,
     dueTasks: List<SmartTask>,
+    smartIconSettings: SmartIconSettings,
     dueTodayTotal: Int,
     requestsCount: Int,
     tasksState: UiState<List<SmartTask>>,
@@ -768,6 +797,8 @@ private fun TasksWorkspaceL3(
     onTaskPhotoClick: (String) -> Unit,
     onTaskEditClick: (SmartTask) -> Unit,
     onTaskDeleteClick: (String) -> Unit,
+    onTaskBadgeTap: (SmartTask) -> Unit,
+    onTaskBadgeDrag: (String, Float, Float) -> Unit,
     onPreviewTaskAlert: (SmartTask) -> Unit,
     onOpenOverview: (Int?) -> Unit
 ) {
@@ -884,14 +915,20 @@ private fun TasksWorkspaceL3(
         }
 
         if (prefs.showSpotlightCard && spotlightTask != null) {
-            Surface(
-                shape = RoundedCornerShape(22.dp),
-                color = colors.cardBg,
-                shadowElevation = 3.dp,
+            var spotlightBadgeDragging by remember(spotlightTask.id) { mutableStateOf(false) }
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .border(1.5.dp, colors.primary.copy(alpha = 0.45f), RoundedCornerShape(22.dp))
+                    .zIndex(if (spotlightBadgeDragging) 100f else 1f)
             ) {
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .shadow(3.dp, RoundedCornerShape(22.dp), clip = false)
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(colors.cardBg)
+                        .border(1.5.dp, colors.primary.copy(alpha = 0.45f), RoundedCornerShape(22.dp))
+                )
                 Column(
                     modifier = Modifier.padding(14.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -939,13 +976,17 @@ private fun TasksWorkspaceL3(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        MediaAvatarSlot(
-                            imgUri = spotlightTask.imgUri,
-                            size = taskDp,
-                            shapeId = prefs.cardShape,
-                            useBannerDefaultIfBlank = false,
-                            contentDescription = spotlightTask.title,
-                            onClick = { onTaskPhotoClick(spotlightTask.id) }
+                        TaskCircleWithFloatingBadge(
+                            task = spotlightTask,
+                            imgDp = taskDp,
+                            photoShape = prefs.cardShape,
+                            isDemo = false,
+                            isResting = !spotlightTask.isActiveOnDate(),
+                            smartIconSettings = smartIconSettings,
+                            onPhotoClick = { onTaskPhotoClick(spotlightTask.id) },
+                            onBadgeTap = onTaskBadgeTap,
+                            onBadgeDrag = onTaskBadgeDrag,
+                            onDraggingChanged = { spotlightBadgeDragging = it }
                         )
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
@@ -1041,11 +1082,14 @@ private fun TasksWorkspaceL3(
         TasksListCard(
             prefs = prefs,
             dueTasks = dueTasks,
+            smartIconSettings = smartIconSettings,
             tasksState = tasksState,
             onDuePillClick = { onOpenOverview(null) },
             onTaskPhotoClick = onTaskPhotoClick,
             onTaskEditClick = onTaskEditClick,
-            onTaskDeleteClick = onTaskDeleteClick
+            onTaskDeleteClick = onTaskDeleteClick,
+            onTaskBadgeTap = onTaskBadgeTap,
+            onTaskBadgeDrag = onTaskBadgeDrag
         )
 
         Spacer(Modifier.height(14.dp))
@@ -1233,24 +1277,29 @@ private fun TaskSearchBar(
 private fun TasksListCard(
     prefs: UserPreferences,
     dueTasks: List<SmartTask>,
+    smartIconSettings: SmartIconSettings,
     tasksState: UiState<List<SmartTask>>,
     onDuePillClick: () -> Unit = {},
     onTaskPhotoClick: (String) -> Unit,
     onTaskEditClick: (SmartTask) -> Unit,
-    onTaskDeleteClick: (String) -> Unit
+    onTaskDeleteClick: (String) -> Unit,
+    onTaskBadgeTap: (SmartTask) -> Unit,
+    onTaskBadgeDrag: (String, Float, Float) -> Unit
 ) {
     val colors = LocalMNotesColors.current
     val textScale = LocalMNotesTextScale.current
     val cardScale = LocalMNotesCardScale.current
     val lang = prefs.lang
-    Surface(
-        shape = RoundedCornerShape(22.dp),
-        color = colors.cardBg,
-        shadowElevation = 2.dp,
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(1.dp, colors.borderSoft, RoundedCornerShape(22.dp))
-    ) {
+    // Outer Box does NOT clip so task circle badges can drag past card boundaries
+    Box(modifier = Modifier.fillMaxWidth()) {
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .shadow(2.dp, RoundedCornerShape(22.dp), clip = false)
+                .clip(RoundedCornerShape(22.dp))
+                .background(colors.cardBg)
+                .border(1.dp, colors.borderSoft, RoundedCornerShape(22.dp))
+        )
         Column(
             modifier = Modifier.padding((14f * cardScale).dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -1292,10 +1341,13 @@ private fun TasksListCard(
             TasksListInner(
                 prefs = prefs,
                 dueTasks = dueTasks,
+                smartIconSettings = smartIconSettings,
                 tasksState = tasksState,
                 onTaskPhotoClick = onTaskPhotoClick,
                 onTaskEditClick = onTaskEditClick,
-                onTaskDeleteClick = onTaskDeleteClick
+                onTaskDeleteClick = onTaskDeleteClick,
+                onTaskBadgeTap = onTaskBadgeTap,
+                onTaskBadgeDrag = onTaskBadgeDrag
             )
         }
     }
@@ -1305,10 +1357,13 @@ private fun TasksListCard(
 private fun TasksListInner(
     prefs: UserPreferences,
     dueTasks: List<SmartTask>,
+    smartIconSettings: SmartIconSettings,
     tasksState: UiState<List<SmartTask>>,
     onTaskPhotoClick: (String) -> Unit,
     onTaskEditClick: (SmartTask) -> Unit,
-    onTaskDeleteClick: (String) -> Unit
+    onTaskDeleteClick: (String) -> Unit,
+    onTaskBadgeTap: (SmartTask) -> Unit,
+    onTaskBadgeDrag: (String, Float, Float) -> Unit
 ) {
     val colors = LocalMNotesColors.current
     val textScale = LocalMNotesTextScale.current
@@ -1355,9 +1410,12 @@ private fun TasksListInner(
                             cardShape = prefs.cardShape,
                             taskImgSize = prefs.taskImgSize,
                             taskImgDp = prefs.taskImgDp,
+                            smartIconSettings = smartIconSettings,
                             onPhotoClick = { onTaskPhotoClick(task.id) },
                             onEditClick = { onTaskEditClick(task) },
-                            onDeleteClick = { onTaskDeleteClick(task.id) }
+                            onDeleteClick = { onTaskDeleteClick(task.id) },
+                            onBadgeTap = onTaskBadgeTap,
+                            onBadgeDrag = onTaskBadgeDrag
                         )
                     }
                 }

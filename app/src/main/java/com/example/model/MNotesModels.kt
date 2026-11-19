@@ -41,6 +41,14 @@ data class SmartTask(
     val lastAlertedDate: String = "",
     val ringId: String = "",
     val sortOrder: Long = 0L,
+    val badgeIconId: String = "",
+    val badgeVisible: Boolean = true,
+    val badgeOffsetX: Float = 20f,
+    val badgeOffsetY: Float = -14f,
+    val badgeSizeDp: Float = 28f,
+    val badgeCategory: String = "auto",
+    val badgeSmartMode: String = "manual",
+    val badgeLocked: Boolean = false,
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
 ) {
@@ -226,6 +234,28 @@ data class FloatingBadgeItem(
 )
 
 @Serializable
+data class SmartIconSettings(
+    val enableSmartAutoIcons: Boolean = false,
+    val smartDefaultMode: String = "manual", // "manual" | "category" | "rotate" | "schedule"
+    val useRestDayIconOnOffDays: Boolean = true,
+    val todayIsHoliday: Boolean = false,
+    val categoryFavorites: Map<String, List<String>> = mapOf(
+        "gym" to listOf("gym_dumbbell_mint", "gym_dumbbell_fire", "char_active_bolt"),
+        "rest" to listOf("char_sleeping_zzz", "sleep_moon_zzz"),
+        "holiday" to listOf("relax_spa_lotus", "char_happy_heart"),
+        "work" to listOf("work_laptop_focus", "work_briefcase"),
+        "study" to listOf("work_study_book", "work_grad_cap"),
+        "sleep" to listOf("char_sleeping_zzz", "sleep_zzz_cloud"),
+        "food" to listOf("food_healthy_meal", "food_breakfast"),
+        "coffee" to listOf("drink_coffee_steam", "drink_mint_tea"),
+        "walk" to listOf("walk_steps_mint", "walk_run_fast"),
+        "relax" to listOf("relax_zen_cloud", "char_resting_moon")
+    ),
+    val dayOfWeekIcons: Map<Int, String> = emptyMap(),
+    val holidayDates: List<String> = emptyList()
+)
+
+@Serializable
 data class BackupTaskDto(
     val title: String,
     val meta: String = "",
@@ -239,7 +269,15 @@ data class BackupTaskDto(
     val nextDueDate: String = "",
     val lastAlertedDate: String = "",
     val ringId: String = "",
-    val sortOrder: Long = 0L
+    val sortOrder: Long = 0L,
+    val badgeIconId: String = "",
+    val badgeVisible: Boolean = true,
+    val badgeOffsetX: Float = 20f,
+    val badgeOffsetY: Float = -14f,
+    val badgeSizeDp: Float = 28f,
+    val badgeCategory: String = "auto",
+    val badgeSmartMode: String = "manual",
+    val badgeLocked: Boolean = false
 )
 
 @Serializable
@@ -330,7 +368,8 @@ data class BackupSnapshotPayload(
     val preferences: BackupPreferencesDto = BackupPreferencesDto(),
     val tasks: List<BackupTaskDto> = emptyList(),
     val requests: List<BackupRequestDto> = emptyList(),
-    val floatingBadges: List<FloatingBadgeItem> = emptyList()
+    val floatingBadges: List<FloatingBadgeItem> = emptyList(),
+    val smartIconSettings: SmartIconSettings = SmartIconSettings()
 )
 
 data class AppThemeSpec(

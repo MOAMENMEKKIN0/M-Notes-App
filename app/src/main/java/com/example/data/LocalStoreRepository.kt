@@ -12,6 +12,7 @@ import com.example.model.BackupTaskDto
 import com.example.model.FloatingBadgeItem
 import com.example.model.QuickRequest
 import com.example.model.RepeatMode
+import com.example.model.SmartIconSettings
 import com.example.model.SmartTask
 import com.example.model.UserPreferences
 import kotlinx.coroutines.CancellationException
@@ -39,7 +40,15 @@ private data class LocalTaskDto(
     val nextDueDate: String = "",
     val lastAlertedDate: String = "",
     val ringId: String = "",
-    val sortOrder: Long = 0L
+    val sortOrder: Long = 0L,
+    val badgeIconId: String = "",
+    val badgeVisible: Boolean = true,
+    val badgeOffsetX: Float = 20f,
+    val badgeOffsetY: Float = -14f,
+    val badgeSizeDp: Float = 28f,
+    val badgeCategory: String = "auto",
+    val badgeSmartMode: String = "manual",
+    val badgeLocked: Boolean = false
 )
 
 @Serializable
@@ -69,7 +78,8 @@ private data class LocalWorkspaceState(
     val tasks: List<LocalTaskDto> = emptyList(),
     val requests: List<LocalRequestDto> = emptyList(),
     val floatingBadgesInitialized: Boolean = false,
-    val floatingBadges: List<FloatingBadgeItem> = emptyList()
+    val floatingBadges: List<FloatingBadgeItem> = emptyList(),
+    val smartIconSettings: SmartIconSettings = SmartIconSettings()
 )
 
 class LocalStoreRepository(private val context: Context) {
@@ -175,7 +185,15 @@ class LocalStoreRepository(private val context: Context) {
                     nextDueDate = it.nextDueDate,
                     lastAlertedDate = it.lastAlertedDate,
                     ringId = it.ringId,
-                    sortOrder = it.sortOrder
+                    sortOrder = it.sortOrder,
+                    badgeIconId = it.badgeIconId,
+                    badgeVisible = it.badgeVisible,
+                    badgeOffsetX = it.badgeOffsetX,
+                    badgeOffsetY = it.badgeOffsetY,
+                    badgeSizeDp = it.badgeSizeDp,
+                    badgeCategory = it.badgeCategory,
+                    badgeSmartMode = it.badgeSmartMode,
+                    badgeLocked = it.badgeLocked
                 )
             }
     }
@@ -205,6 +223,10 @@ class LocalStoreRepository(private val context: Context) {
 
     val floatingBadgesFlow: Flow<List<FloatingBadgeItem>> = stateFlow.map { state ->
         state.floatingBadges
+    }
+
+    val smartIconSettingsFlow: Flow<SmartIconSettings> = stateFlow.map { state ->
+        state.smartIconSettings
     }
 
     suspend fun ensureInitialized(): Result<Unit> = runWorkspaceEdit { state ->
@@ -242,7 +264,14 @@ class LocalStoreRepository(private val context: Context) {
             alertTime = "23:00",
             nextDueDate = today,
             lastAlertedDate = "",
-            sortOrder = nowOrder + 1
+            sortOrder = nowOrder + 1,
+            badgeIconId = "gym_dumbbell_mint",
+            badgeVisible = true,
+            badgeOffsetX = 20f,
+            badgeOffsetY = -14f,
+            badgeSizeDp = 28f,
+            badgeCategory = "gym",
+            badgeSmartMode = "manual"
         )
         val starter2 = LocalTaskDto(
             id = UUID.randomUUID().toString(),
@@ -257,7 +286,14 @@ class LocalStoreRepository(private val context: Context) {
             alertTime = "21:00",
             nextDueDate = today,
             lastAlertedDate = "",
-            sortOrder = nowOrder
+            sortOrder = nowOrder,
+            badgeIconId = "char_sleeping_zzz",
+            badgeVisible = true,
+            badgeOffsetX = 20f,
+            badgeOffsetY = -14f,
+            badgeSizeDp = 28f,
+            badgeCategory = "study",
+            badgeSmartMode = "manual"
         )
         state.copy(
             initialized = true,
@@ -382,7 +418,15 @@ class LocalStoreRepository(private val context: Context) {
                 nextDueDate = task.nextDueDate.take(20),
                 lastAlertedDate = task.lastAlertedDate.take(20),
                 ringId = task.ringId.take(100),
-                sortOrder = task.sortOrder
+                sortOrder = task.sortOrder,
+                badgeIconId = task.badgeIconId.take(64),
+                badgeVisible = task.badgeVisible,
+                badgeOffsetX = task.badgeOffsetX.coerceIn(-260f, 260f),
+                badgeOffsetY = task.badgeOffsetY.coerceIn(-260f, 260f),
+                badgeSizeDp = task.badgeSizeDp.coerceIn(20f, 96f),
+                badgeCategory = task.badgeCategory.ifBlank { "auto" }.take(24),
+                badgeSmartMode = task.badgeSmartMode.ifBlank { "manual" }.take(24),
+                badgeLocked = task.badgeLocked
             )
             state.copy(initialized = true, tasks = listOf(dto) + state.tasks)
         }
@@ -406,11 +450,72 @@ class LocalStoreRepository(private val context: Context) {
                     alertTime = task.alertTime.take(10),
                     nextDueDate = task.nextDueDate.take(20),
                     lastAlertedDate = task.lastAlertedDate.take(20),
-                    ringId = task.ringId.take(100)
+                    ringId = task.ringId.take(100),
+                    badgeIconId = task.badgeIconId.take(64),
+                    badgeVisible = task.badgeVisible,
+                    badgeOffsetX = task.badgeOffsetX.coerceIn(-260f, 260f),
+                    badgeOffsetY = task.badgeOffsetY.coerceIn(-260f, 260f),
+                    badgeSizeDp = task.badgeSizeDp.coerceIn(20f, 96f),
+                    badgeCategory = task.badgeCategory.ifBlank { "auto" }.take(24),
+                    badgeSmartMode = task.badgeSmartMode.ifBlank { "manual" }.take(24),
+                    badgeLocked = task.badgeLocked
                 )
             } else existing
         }
         state.copy(tasks = updated)
+    }
+
+    suspend fun updateTaskBadge(
+        taskId: String,
+        iconId: String? = null,
+        visible: Boolean? = null,
+        offsetX: Float? = null,
+        offsetY: Float? = null,
+        sizeDp: Float? = null,
+        category: String? = null,
+        smartMode: String? = null,
+        locked: Boolean? = null
+    ): Result<Unit> = runWorkspaceEdit { state ->
+        val updated = state.tasks.map { existing ->
+            if (existing.id == taskId) {
+                existing.copy(
+                    badgeIconId = iconId?.take(64) ?: existing.badgeIconId,
+                    badgeVisible = visible ?: existing.badgeVisible,
+                    badgeOffsetX = (offsetX ?: existing.badgeOffsetX).coerceIn(-260f, 260f),
+                    badgeOffsetY = (offsetY ?: existing.badgeOffsetY).coerceIn(-260f, 260f),
+                    badgeSizeDp = (sizeDp ?: existing.badgeSizeDp).coerceIn(20f, 96f),
+                    badgeCategory = category?.ifBlank { "auto" }?.take(24) ?: existing.badgeCategory,
+                    badgeSmartMode = smartMode?.ifBlank { "manual" }?.take(24) ?: existing.badgeSmartMode,
+                    badgeLocked = locked ?: existing.badgeLocked
+                )
+            } else existing
+        }
+        state.copy(initialized = true, tasks = updated)
+    }
+
+    suspend fun applyBadgeToAllTasks(
+        iconId: String,
+        offsetX: Float,
+        offsetY: Float,
+        sizeDp: Float,
+        visible: Boolean,
+        smartMode: String? = null
+    ): Result<Unit> = runWorkspaceEdit { state ->
+        val updated = state.tasks.map { existing ->
+            existing.copy(
+                badgeIconId = iconId.take(64),
+                badgeVisible = visible,
+                badgeOffsetX = offsetX.coerceIn(-260f, 260f),
+                badgeOffsetY = offsetY.coerceIn(-260f, 260f),
+                badgeSizeDp = sizeDp.coerceIn(20f, 96f),
+                badgeSmartMode = smartMode?.ifBlank { "manual" }?.take(24) ?: existing.badgeSmartMode
+            )
+        }
+        state.copy(initialized = true, tasks = updated)
+    }
+
+    suspend fun saveSmartIconSettings(settings: SmartIconSettings): Result<Unit> = runWorkspaceEdit { state ->
+        state.copy(initialized = true, smartIconSettings = settings)
     }
 
     suspend fun advanceTaskSchedule(
@@ -646,7 +751,15 @@ class LocalStoreRepository(private val context: Context) {
                 nextDueDate = t.nextDueDate.take(20),
                 lastAlertedDate = t.lastAlertedDate.take(20),
                 ringId = t.ringId.take(100),
-                sortOrder = if (t.sortOrder > 0L) t.sortOrder else (System.currentTimeMillis() - idx)
+                sortOrder = if (t.sortOrder > 0L) t.sortOrder else (System.currentTimeMillis() - idx),
+                badgeIconId = t.badgeIconId.take(64),
+                badgeVisible = t.badgeVisible,
+                badgeOffsetX = t.badgeOffsetX.coerceIn(-260f, 260f),
+                badgeOffsetY = t.badgeOffsetY.coerceIn(-260f, 260f),
+                badgeSizeDp = t.badgeSizeDp.coerceIn(20f, 96f),
+                badgeCategory = t.badgeCategory.ifBlank { "auto" }.take(24),
+                badgeSmartMode = t.badgeSmartMode.ifBlank { "manual" }.take(24),
+                badgeLocked = t.badgeLocked
             )
         }
         val baseTime = System.currentTimeMillis()
@@ -684,7 +797,8 @@ class LocalStoreRepository(private val context: Context) {
                 }
             } else {
                 state.floatingBadges
-            }
+            },
+            smartIconSettings = snapshot.smartIconSettings
         )
     }
 
