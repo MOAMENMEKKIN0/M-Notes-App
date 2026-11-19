@@ -1,15 +1,11 @@
 package com.example.ui.components
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.awaitTouchSlopOrCancellation
-import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,7 +14,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -77,6 +72,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalDensity
@@ -84,7 +80,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
@@ -879,15 +874,17 @@ private fun TaskCircleInteractivePreviewStage(
     val density = LocalDensity.current
     val latestOnDrag by rememberUpdatedState(onDrag)
 
-    var liveX by remember(offsetX) { mutableFloatStateOf(offsetX) }
-    var liveY by remember(offsetY) { mutableFloatStateOf(offsetY) }
+    val densityPx = density.density
+    var liveXPx by remember { mutableFloatStateOf(offsetX * densityPx) }
+    var liveYPx by remember { mutableFloatStateOf(offsetY * densityPx) }
     var isDragging by remember { mutableStateOf(false) }
 
-    val dragScale by animateFloatAsState(
-        targetValue = if (isDragging) 1.12f else 1f,
-        animationSpec = spring(dampingRatio = 0.65f, stiffness = 500f),
-        label = "preview_task_badge_scale"
-    )
+    LaunchedEffect(offsetX, offsetY, densityPx) {
+        if (!isDragging) {
+            liveXPx = offsetX * densityPx
+            liveYPx = offsetY * densityPx
+        }
+    }
 
     val taskCircleDp = taskImageDp(prefs.taskImgSize, prefs.taskImgDp).value.coerceIn(48f, 74f).dp
     val photoShape = when (prefs.cardShape) {
@@ -959,44 +956,42 @@ private fun TaskCircleInteractivePreviewStage(
                     )
 
                     if (visible) {
-                        val offsetXPx = with(density) { liveX.dp.toPx() }
-                        val offsetYPx = with(density) { liveY.dp.toPx() }
                         Box(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier
                                 .zIndex(50f)
-                                .absoluteOffset { IntOffset(offsetXPx.roundToInt(), offsetYPx.roundToInt()) }
-                                .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
                                 .graphicsLayer {
-                                    scaleX = dragScale
-                                    scaleY = dragScale
+                                    // Direct GPU translation: zero recomposition, zero relayout, zero lag
+                                    translationX = liveXPx
+                                    translationY = liveYPx
                                 }
-                                .pointerInput(density.density) {
+                                .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                                .pointerInput(densityPx) {
+                                    val minXPx = -160f * densityPx
+                                    val maxXPx = 160f * densityPx
+                                    val minYPx = -110f * densityPx
+                                    val maxYPx = 110f * densityPx
                                     awaitEachGesture {
                                         val down = awaitFirstDown(requireUnconsumed = false)
-                                        var startX = 0f
-                                        var startY = 0f
-                                        val dragStart = awaitTouchSlopOrCancellation(down.id) { change, over ->
-                                            change.consume()
-                                            startX = over.x
-                                            startY = over.y
-                                        }
-                                        if (dragStart != null) {
-                                            isDragging = true
-                                            liveX = (liveX + startX / density.density).coerceIn(-160f, 160f)
-                                            liveY = (liveY + startY / density.density).coerceIn(-110f, 110f)
-                                            latestOnDrag(liveX, liveY)
-                                            drag(dragStart.id) { change ->
-                                                val delta = change.positionChange()
-                                                if (delta.x != 0f || delta.y != 0f) {
-                                                    change.consume()
-                                                    liveX = (liveX + delta.x / density.density).coerceIn(-160f, 160f)
-                                                    liveY = (liveY + delta.y / density.density).coerceIn(-110f, 110f)
-                                                    latestOnDrag(liveX, liveY)
-                                                }
+                                        val pointerId = down.id
+                                        down.consume()
+                                        isDragging = true
+                                        while (true) {
+                                            val event = awaitPointerEvent(PointerEventPass.Main)
+                                            val change = event.changes.firstOrNull { it.id == pointerId } ?: break
+                                            if (!change.pressed) {
+                                                change.consume()
+                                                break
                                             }
-                                            isDragging = false
+                                            val delta = change.positionChange()
+                                            if (delta.x != 0f || delta.y != 0f) {
+                                                change.consume()
+                                                liveXPx = (liveXPx + delta.x).coerceIn(minXPx, maxXPx)
+                                                liveYPx = (liveYPx + delta.y).coerceIn(minYPx, maxYPx)
+                                            }
                                         }
+                                        isDragging = false
+                                        latestOnDrag(liveXPx / densityPx, liveYPx / densityPx)
                                     }
                                 }
                                 .testTag("task_badge_preview_draggable")
@@ -1021,9 +1016,9 @@ private fun TaskCircleInteractivePreviewStage(
                     )
                     Text(
                         text = if (lang == "en") {
-                            "Drag icon freely • X:${liveX.roundToInt()} Y:${liveY.roundToInt()}"
+                            "Drag icon freely • X:${offsetX.roundToInt()} Y:${offsetY.roundToInt()}"
                         } else {
-                            "اسحب الأيقونة بحرية • X:${liveX.roundToInt()} Y:${liveY.roundToInt()}"
+                            "اسحب الأيقونة بحرية • X:${offsetX.roundToInt()} Y:${offsetY.roundToInt()}"
                         },
                         color = colors.textMuted,
                         fontSize = 10.sp,
@@ -1491,36 +1486,58 @@ private fun LiveFloatingIconPreviewStage(
             }
 
             Box(
+                contentAlignment = Alignment.Center,
                 modifier = Modifier
-                    .absoluteOffset { IntOffset(posX.roundToInt(), posY.roundToInt()) }
+                    .graphicsLayer {
+                        translationX = posX
+                        translationY = posY
+                    }
+                    .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
                     .pointerInput(badge.id, maxX, maxY) {
+                        val dragThresholdPx = 3.5.dp.toPx()
+                        val dragThresholdSq = dragThresholdPx * dragThresholdPx
                         awaitEachGesture {
                             val down = awaitFirstDown(requireUnconsumed = false)
-                            var startOverX = 0f
-                            var startOverY = 0f
-                            val dragStart = awaitTouchSlopOrCancellation(down.id) { change, over ->
-                                change.consume()
-                                startOverX = over.x
-                                startOverY = over.y
-                            }
-                            if (dragStart == null) {
-                                latestOnSelect(badge.id)
-                            } else {
-                                isDragging = true
-                                latestOnSelect(badge.id)
-                                posX = (posX + startOverX).coerceIn(0f, maxX)
-                                posY = (posY + startOverY).coerceIn(0f, maxY)
-                                latestOnDrag(badge.id, (posX / maxX).coerceIn(0f, 1f), (posY / maxY).coerceIn(0f, 1f))
-                                drag(dragStart.id) { change ->
-                                    val delta = change.positionChange()
-                                    if (delta.x != 0f || delta.y != 0f) {
-                                        change.consume()
+                            val pointerId = down.id
+                            down.consume()
+                            var totalDx = 0f
+                            var totalDy = 0f
+                            var dragging = false
+                            while (true) {
+                                val event = awaitPointerEvent(PointerEventPass.Main)
+                                val change = event.changes.firstOrNull { it.id == pointerId } ?: break
+                                if (!change.pressed) {
+                                    change.consume()
+                                    if (dragging) {
+                                        isDragging = false
+                                        latestOnDrag(
+                                            badge.id,
+                                            (posX / maxX).coerceIn(0f, 1f),
+                                            (posY / maxY).coerceIn(0f, 1f)
+                                        )
+                                    } else {
+                                        latestOnSelect(badge.id)
+                                    }
+                                    break
+                                }
+                                val delta = change.positionChange()
+                                if (delta.x != 0f || delta.y != 0f) {
+                                    change.consume()
+                                    if (!dragging) {
+                                        totalDx += delta.x
+                                        totalDy += delta.y
+                                        if (totalDx * totalDx + totalDy * totalDy >= dragThresholdSq) {
+                                            dragging = true
+                                            isDragging = true
+                                            latestOnSelect(badge.id)
+                                            posX = (posX + totalDx).coerceIn(0f, maxX)
+                                            posY = (posY + totalDy).coerceIn(0f, maxY)
+                                        }
+                                    } else {
                                         posX = (posX + delta.x).coerceIn(0f, maxX)
                                         posY = (posY + delta.y).coerceIn(0f, maxY)
-                                        latestOnDrag(badge.id, (posX / maxX).coerceIn(0f, 1f), (posY / maxY).coerceIn(0f, 1f))
                                     }
                                 }
-                                isDragging = false
                             }
                         }
                     }

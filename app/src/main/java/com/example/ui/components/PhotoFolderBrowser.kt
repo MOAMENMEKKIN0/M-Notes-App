@@ -20,6 +20,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.DirectionsRun
 import androidx.compose.material.icons.rounded.Eco
 import androidx.compose.material.icons.rounded.Face
 import androidx.compose.material.icons.rounded.FitnessCenter
@@ -48,6 +49,7 @@ import com.example.ui.theme.LocalMNotesColors
 
 private fun iconForCategory(categoryId: String): ImageVector = when (categoryId) {
     "gym" -> Icons.Rounded.FitnessCenter
+    "cardio" -> Icons.Rounded.DirectionsRun
     "fruits" -> Icons.Rounded.Spa
     "vegetables" -> Icons.Rounded.Eco
     "heritage" -> Icons.Rounded.Face

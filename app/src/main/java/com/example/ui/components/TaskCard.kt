@@ -1,20 +1,15 @@
 package com.example.ui.components
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.awaitTouchSlopOrCancellation
-import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -32,6 +27,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -45,6 +41,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalDensity
@@ -52,7 +49,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
@@ -65,7 +61,6 @@ import com.example.ui.theme.LocalMNotesCardScale
 import com.example.ui.theme.LocalMNotesColors
 import com.example.ui.theme.LocalMNotesTextScale
 import com.example.ui.theme.LocalMNotesWeight
-import kotlin.math.roundToInt
 
 /**
  * Renders the main circular task photo alongside its independent, draggable,
@@ -107,20 +102,23 @@ fun TaskCircleWithFloatingBadge(
         if (isDemo) null else SmartTaskBadgeResolver.resolveTaskBadgeIconId(task, smartIconSettings)
     }
 
-    var liveOffsetX by remember(task.id, task.badgeOffsetX) { mutableFloatStateOf(task.badgeOffsetX) }
-    var liveOffsetY by remember(task.id, task.badgeOffsetY) { mutableFloatStateOf(task.badgeOffsetY) }
+    val densityPx = density.density
+    var offsetXPx by remember(task.id) { mutableFloatStateOf(task.badgeOffsetX * densityPx) }
+    var offsetYPx by remember(task.id) { mutableFloatStateOf(task.badgeOffsetY * densityPx) }
     var isDragging by remember(task.id) { mutableStateOf(false) }
+
+    // Sync persisted or Settings-driven offset updates only when not actively dragging
+    LaunchedEffect(task.badgeOffsetX, task.badgeOffsetY, densityPx) {
+        if (!isDragging) {
+            offsetXPx = task.badgeOffsetX * densityPx
+            offsetYPx = task.badgeOffsetY * densityPx
+        }
+    }
 
     val latestTask by rememberUpdatedState(task)
     val latestOnBadgeTap by rememberUpdatedState(onBadgeTap)
     val latestOnBadgeDrag by rememberUpdatedState(onBadgeDrag)
     val latestOnDraggingChanged by rememberUpdatedState(onDraggingChanged)
-
-    val dragScale by animateFloatAsState(
-        targetValue = if (isDragging) 1.12f else 1f,
-        animationSpec = spring(dampingRatio = 0.65f, stiffness = 520f),
-        label = "task_badge_drag_scale"
-    )
 
     Box(contentAlignment = Alignment.Center) {
         MediaAvatarSlot(
@@ -135,29 +133,33 @@ fun TaskCircleWithFloatingBadge(
         )
 
         if (!resolvedIconId.isNullOrBlank()) {
-            val offsetXPx = with(density) { liveOffsetX.dp.toPx() }
-            val offsetYPx = with(density) { liveOffsetY.dp.toPx() }
-
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
                     .zIndex(if (isDragging) 95f else 15f)
-                    .absoluteOffset { IntOffset(offsetXPx.roundToInt(), offsetYPx.roundToInt()) }
-                    .sizeIn(minWidth = 44.dp, minHeight = 44.dp)
                     .graphicsLayer {
-                        scaleX = dragScale
-                        scaleY = dragScale
+                        // GPU-only render-layer translation: ZERO recomposition, ZERO relayout,
+                        // ZERO easing/spring lag — glued 1:1 to finger in real time.
+                        translationX = offsetXPx
+                        translationY = offsetYPx
                     }
-                    .pointerInput(task.id, task.badgeLocked, density.density) {
+                    .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                    .pointerInput(task.id, task.badgeLocked, densityPx) {
+                        val dragThresholdPx = 3.5.dp.toPx()
+                        val dragThresholdSq = dragThresholdPx * dragThresholdPx
+                        val minPx = -260f * densityPx
+                        val maxPx = 260f * densityPx
+
                         awaitEachGesture {
                             val down = awaitFirstDown(requireUnconsumed = false)
+                            val pointerId = down.id
                             if (latestTask.badgeLocked) {
                                 // Locked: drag disabled, clean tap opens Icon Library
                                 var movedFar = false
-                                val slop = viewConfiguration.touchSlop
+                                val tapSlopSq = (dragThresholdPx * 3f) * (dragThresholdPx * 3f)
                                 while (true) {
-                                    val event = awaitPointerEvent()
-                                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                    val event = awaitPointerEvent(PointerEventPass.Main)
+                                    val change = event.changes.firstOrNull { it.id == pointerId } ?: break
                                     if (!change.pressed) {
                                         if (!movedFar) {
                                             change.consume()
@@ -165,37 +167,59 @@ fun TaskCircleWithFloatingBadge(
                                         }
                                         break
                                     }
-                                    if ((change.position - down.position).getDistance() > slop) {
+                                    val d = change.position - down.position
+                                    if (d.x * d.x + d.y * d.y > tapSlopSq) {
                                         movedFar = true
                                     }
                                 }
                             } else {
-                                var startOverX = 0f
-                                var startOverY = 0f
-                                val dragStart = awaitTouchSlopOrCancellation(down.id) { change, over ->
-                                    change.consume()
-                                    startOverX = over.x
-                                    startOverY = over.y
-                                }
-                                if (dragStart == null) {
-                                    // Pure tap (no drag): open Icon Library directly
-                                    latestOnBadgeTap(latestTask)
-                                } else {
-                                    isDragging = true
-                                    latestOnDraggingChanged(true)
-                                    liveOffsetX = (liveOffsetX + startOverX / density.density).coerceIn(-260f, 260f)
-                                    liveOffsetY = (liveOffsetY + startOverY / density.density).coerceIn(-260f, 260f)
-                                    drag(dragStart.id) { change ->
-                                        val delta = change.positionChange()
-                                        if (delta.x != 0f || delta.y != 0f) {
-                                            change.consume()
-                                            liveOffsetX = (liveOffsetX + delta.x / density.density).coerceIn(-260f, 260f)
-                                            liveOffsetY = (liveOffsetY + delta.y / density.density).coerceIn(-260f, 260f)
+                                // Claim gesture immediately so parent LazyColumn / HorizontalPager
+                                // cannot steal touches or introduce drag resistance.
+                                down.consume()
+                                var totalDx = 0f
+                                var totalDy = 0f
+                                var dragging = false
+
+                                while (true) {
+                                    val event = awaitPointerEvent(PointerEventPass.Main)
+                                    val change = event.changes.firstOrNull { it.id == pointerId } ?: break
+                                    if (!change.pressed) {
+                                        change.consume()
+                                        if (dragging) {
+                                            isDragging = false
+                                            latestOnDraggingChanged(false)
+                                            latestOnBadgeDrag(
+                                                latestTask.id,
+                                                offsetXPx / densityPx,
+                                                offsetYPx / densityPx
+                                            )
+                                        } else {
+                                            // Pure tap: open Icon Library directly
+                                            latestOnBadgeTap(latestTask)
+                                        }
+                                        break
+                                    }
+
+                                    val delta = change.positionChange()
+                                    if (delta.x != 0f || delta.y != 0f) {
+                                        change.consume()
+                                        if (!dragging) {
+                                            totalDx += delta.x
+                                            totalDy += delta.y
+                                            if (totalDx * totalDx + totalDy * totalDy >= dragThresholdSq) {
+                                                dragging = true
+                                                isDragging = true
+                                                latestOnDraggingChanged(true)
+                                                // Apply full initial movement immediately (zero dead-zone lag)
+                                                offsetXPx = (offsetXPx + totalDx).coerceIn(minPx, maxPx)
+                                                offsetYPx = (offsetYPx + totalDy).coerceIn(minPx, maxPx)
+                                            }
+                                        } else {
+                                            // Direct 1:1 sub-pixel finger tracking
+                                            offsetXPx = (offsetXPx + delta.x).coerceIn(minPx, maxPx)
+                                            offsetYPx = (offsetYPx + delta.y).coerceIn(minPx, maxPx)
                                         }
                                     }
-                                    isDragging = false
-                                    latestOnDraggingChanged(false)
-                                    latestOnBadgeDrag(latestTask.id, liveOffsetX, liveOffsetY)
                                 }
                             }
                         }

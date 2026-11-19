@@ -552,13 +552,14 @@ object MNotesCatalog {
     val photoCategories = listOf(
         PhotoCategorySpec("all", "كل الصور", "All Photos"),
         PhotoCategorySpec("gym", "أدوات وصور الجيم", "Gym & Gear"),
+        PhotoCategorySpec("cardio", "كارديو ولياقة", "Cardio & Fitness"),
         PhotoCategorySpec("fruits", "فواكه القرون الوسطى", "Medieval Fruits"),
         PhotoCategorySpec("vegetables", "خضروات القرون الوسطى", "Medieval Veggies"),
         PhotoCategorySpec("heritage", "شخصيات وعصور زمان", "Characters & Era")
     )
 
     val pixel3dPhotos = listOf(
-        // Gym Equipment & Workouts
+        // Gym Equipment & Workouts (Existing + Expanded Pixers Strength Collection)
         BuiltInPhotoSpec("res://img_3d_gym_workout", "دمبل تمرين", "Dumbbells", "gym"),
         BuiltInPhotoSpec("res://img_3d_gym_chest", "تمرين الصدر", "Chest Press", "gym"),
         BuiltInPhotoSpec("res://img_3d_gym_back", "تمرين الظهر", "Back Workout", "gym"),
@@ -567,6 +568,15 @@ object MNotesCatalog {
         BuiltInPhotoSpec("res://img_3d_gym_lunges", "طعن بالدمبل", "Dumbbell Lunges", "gym"),
         BuiltInPhotoSpec("res://img_3d_gym_arms", "تمرين الذراع والبار", "Arm Curl Bar", "gym"),
         BuiltInPhotoSpec("res://img_3d_gym_shoulders", "تمرين الأكتاف", "Shoulder Press", "gym"),
+        BuiltInPhotoSpec("res://img_3d_strength_exercises#0", "الرفعة الميتة بالبار", "Barbell Deadlift", "gym"),
+        BuiltInPhotoSpec("res://img_3d_strength_exercises#1", "تمرين العقلة", "Pull-Ups", "gym"),
+        BuiltInPhotoSpec("res://img_3d_strength_exercises#2", "سحب الكابل للظهر", "Lat Pulldown", "gym"),
+        BuiltInPhotoSpec("res://img_3d_strength_exercises#3", "ضغط البنش بالبار", "Barbell Bench Press", "gym"),
+        BuiltInPhotoSpec("res://img_3d_strength_exercises#4", "تمرين الضغط", "Push-Ups", "gym"),
+        BuiltInPhotoSpec("res://img_3d_strength_exercises#5", "تمرين البلانك والبطن", "Core Plank", "gym"),
+        BuiltInPhotoSpec("res://img_3d_strength_exercises#6", "حبال القوة والتحدي", "Battle Ropes HIIT", "gym"),
+        BuiltInPhotoSpec("res://img_3d_strength_exercises#7", "أرجحة الكيتل بل", "Kettlebell Swing", "gym"),
+        BuiltInPhotoSpec("res://img_3d_strength_exercises#8", "إطالة ومرونة يوجا", "Stretch & Yoga", "gym"),
         BuiltInPhotoSpec("res://img_gym_gear#0", "دمبل سداسي أسود", "Hex Dumbbells", "gym"),
         BuiltInPhotoSpec("res://img_gym_gear#1", "كيتل بل نعناعي", "Kettlebell", "gym"),
         BuiltInPhotoSpec("res://img_gym_gear#2", "بار أولمبي وأوزان", "Olympic Barbell", "gym"),
@@ -576,6 +586,26 @@ object MNotesCatalog {
         BuiltInPhotoSpec("res://img_gym_gear#6", "قفازات ملاكمة", "Boxing Gloves", "gym"),
         BuiltInPhotoSpec("res://img_gym_gear#7", "طارات أوزان ملونة", "Weight Plates", "gym"),
         BuiltInPhotoSpec("res://img_gym_gear#8", "شيكر ومنشفة جيم", "Shaker & Towel", "gym"),
+        BuiltInPhotoSpec("res://img_cardio_gym_machines#3", "جهاز الكابل كروس", "Cable Crossover", "gym"),
+        BuiltInPhotoSpec("res://img_cardio_gym_machines#4", "باور راك وسكوات", "Power Squat Rack", "gym"),
+        BuiltInPhotoSpec("res://img_cardio_gym_machines#6", "كرة طبية ومات تمرين", "Med Ball & Mat", "gym"),
+        BuiltInPhotoSpec("res://img_cardio_gym_machines#7", "كيس ملاكمة رياضي", "Heavy Punching Bag", "gym"),
+        BuiltInPhotoSpec("res://img_cardio_gym_machines#8", "فوم رولر وحبال مقاومة", "Roller & Bands", "gym"),
+
+        // Cardio & Fitness Activities & Machines (Pixers Style)
+        BuiltInPhotoSpec("res://img_3d_cardio_activities#0", "الجري على المشاية", "Treadmill Run", "cardio"),
+        BuiltInPhotoSpec("res://img_3d_cardio_activities#1", "الجري والهرولة", "Outdoor Running", "cardio"),
+        BuiltInPhotoSpec("res://img_3d_cardio_activities#2", "دراجة الكارديو الثابتة", "Spin Cycling", "cardio"),
+        BuiltInPhotoSpec("res://img_3d_cardio_activities#3", "ركوب الدراجة", "Road Cycling", "cardio"),
+        BuiltInPhotoSpec("res://img_3d_cardio_activities#4", "نط الحبل كارديو", "Jump Rope Cardio", "cardio"),
+        BuiltInPhotoSpec("res://img_3d_cardio_activities#5", "جهاز التجديف", "Rowing Workout", "cardio"),
+        BuiltInPhotoSpec("res://img_3d_cardio_activities#6", "جهاز الأوربتراك", "Elliptical Trainer", "cardio"),
+        BuiltInPhotoSpec("res://img_3d_cardio_activities#7", "جهاز صعود الدرج", "Stair Climber", "cardio"),
+        BuiltInPhotoSpec("res://img_3d_cardio_activities#8", "كارديو وملاكمة", "Boxing Cardio", "cardio"),
+        BuiltInPhotoSpec("res://img_cardio_gym_machines#0", "مشاية كهربائية", "Treadmill Machine", "cardio"),
+        BuiltInPhotoSpec("res://img_cardio_gym_machines#1", "دراجة تمرين رياضية", "Exercise Spin Bike", "cardio"),
+        BuiltInPhotoSpec("res://img_cardio_gym_machines#2", "جهاز التجديف الرياضي", "Indoor Rower", "cardio"),
+        BuiltInPhotoSpec("res://img_cardio_gym_machines#5", "حذاء جري وساعة", "Running Shoes", "cardio"),
 
         // Medieval Fruits
         BuiltInPhotoSpec("res://img_3d_ancient_fruits", "سلة فواكه زمان", "Ancient Fruit Bowl", "fruits"),

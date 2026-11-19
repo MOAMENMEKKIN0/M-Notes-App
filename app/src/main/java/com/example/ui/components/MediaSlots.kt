@@ -118,6 +118,9 @@ private fun builtInDrawableForName(name: String): Int? = when (name) {
     "img_medieval_fruits" -> R.drawable.img_medieval_fruits_1795028748903
     "img_medieval_veggies" -> R.drawable.img_medieval_veggies_1795028749693
     "img_gym_gear" -> R.drawable.img_gym_gear_1795028749019
+    "img_3d_cardio_activities" -> R.drawable.img_3d_cardio_activities_1795097534637
+    "img_3d_strength_exercises" -> R.drawable.img_3d_strength_exercises_1795097533008
+    "img_cardio_gym_machines" -> R.drawable.img_cardio_gym_machines_1795097532792
     else -> null
 }
 
@@ -132,7 +135,7 @@ private fun parseBuiltInUri(uri: String): Pair<Int, Int?>? {
 }
 
 private object GridTileBitmapCache {
-    private val cache = LruCache<String, ImageBitmap>(56)
+    private val cache = LruCache<String, ImageBitmap>(96)
 
     fun get(key: String): ImageBitmap? = cache.get(key)
 
