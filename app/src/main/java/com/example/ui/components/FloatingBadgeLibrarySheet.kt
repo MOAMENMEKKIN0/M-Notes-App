@@ -574,6 +574,20 @@ fun FloatingBadgeLibrarySheet(
 
     var selectedCategoryId by remember { mutableStateOf("all") }
     var searchQuery by remember { mutableStateOf("") }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    if (showDeleteConfirm) {
+        FloatingBadgeDeleteConfirmDialog(
+            badge = badge,
+            lang = lang,
+            onConfirmDelete = {
+                showDeleteConfirm = false
+                onDelete()
+                safeDismisser.dismiss()
+            },
+            onDismiss = { showDeleteConfirm = false }
+        )
+    }
 
     val activeSpec = remember(draftIconId) { FloatingBadgeCatalog.byId(draftIconId) }
     val filteredIcons = remember(selectedCategoryId, searchQuery) {
@@ -788,8 +802,7 @@ fun FloatingBadgeLibrarySheet(
                     tint = Color(0xFFEF4444),
                     bg = Color(0xFFFEF2F2),
                     onClick = {
-                        onDelete()
-                        safeDismisser.dismiss()
+                        showDeleteConfirm = true
                     },
                     tag = "library_delete_badge"
                 )

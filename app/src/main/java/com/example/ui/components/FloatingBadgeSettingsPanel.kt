@@ -41,18 +41,23 @@ import androidx.compose.material.icons.rounded.LockOpen
 import androidx.compose.material.icons.rounded.OpenWith
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Remove
+import androidx.compose.material.icons.rounded.RestartAlt
+import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -93,20 +98,19 @@ import com.example.ui.theme.LocalMNotesColors
 import kotlin.math.roundToInt
 
 /**
- * Full Floating Circular Icon Studio inside Settings:
- * - Tab 0 ("Task Circle & Apply"): Real interactive preview with the selected task's circle,
- *   drag/position/resize/choose from 110+ icons, and a real "Apply" button that applies the
- *   icon directly onto the actual task circle(s) on the main screen!
- * - Tab 1 ("Smart Daily Rules"): Configure user-chosen favorites per category, weekday icons,
- *   rest-day & holiday rules, and automatic rotation.
- * - Tab 2 ("Free Screen Copies"): Independent screen-wide floating copies (Add, Duplicate,
- *   Resize, Hide/Show, Lock, Delete).
+ * Full Floating Icons Settings Page:
+ * - Tab 0 ("Floating Icons"): List of all existing floating icons with Show/Hide toggles,
+ *   Delete buttons (with confirmation dialog), "Restore all deleted icons", "Reset positions",
+ *   plus live interactive preview & 3D library customization.
+ * - Tab 1 ("Task Circle"): Interactive preview with selected task circle + Apply button.
+ * - Tab 2 ("Smart Rules"): Smart daily/category/weekday icon rules.
  */
 @Composable
 fun FloatingBadgeSettingsFolderContent(
     tasks: List<SmartTask>,
     smartIconSettings: SmartIconSettings,
     badges: List<FloatingBadgeItem>,
+    deletedBadges: List<FloatingBadgeItem> = emptyList(),
     prefs: UserPreferences,
     lang: String,
     viewModel: MNotesViewModel,
@@ -116,7 +120,7 @@ fun FloatingBadgeSettingsFolderContent(
     var activeTab by remember { mutableIntStateOf(0) }
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        // 3-Tab Switcher
+        // 3-Tab Switcher (Default: Floating Icons manager)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -127,9 +131,9 @@ fun FloatingBadgeSettingsFolderContent(
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             val tabs = listOf(
-                Triple(0, if (lang == "en") "Task Apply" else "دائرة المهمة", "studio_tab_task"),
-                Triple(1, if (lang == "en") "Smart Rules" else "قواعد ذكية", "studio_tab_smart"),
-                Triple(2, if (lang == "en") "Screen Copies" else "نسخ حرة", "studio_tab_copies")
+                Triple(0, if (lang == "en") "Floating Icons" else "الأيقونات العائمة", "studio_tab_copies"),
+                Triple(1, if (lang == "en") "Task Circle" else "دائرة المهمة", "studio_tab_task"),
+                Triple(2, if (lang == "en") "Smart Rules" else "قواعد ذكية", "studio_tab_smart")
             )
             tabs.forEach { (idx, label, tag) ->
                 val sel = activeTab == idx
@@ -159,7 +163,15 @@ fun FloatingBadgeSettingsFolderContent(
         }
 
         when (activeTab) {
-            0 -> TaskCircleBadgeApplyPanel(
+            0 -> ScreenFloatingCopiesPanel(
+                badges = badges,
+                deletedBadges = deletedBadges,
+                prefs = prefs,
+                sampleTask = tasks.firstOrNull(),
+                lang = lang,
+                viewModel = viewModel
+            )
+            1 -> TaskCircleBadgeApplyPanel(
                 tasks = tasks,
                 smartIconSettings = smartIconSettings,
                 prefs = prefs,
@@ -167,15 +179,8 @@ fun FloatingBadgeSettingsFolderContent(
                 viewModel = viewModel,
                 onAppliedAndClose = onAppliedAndClose
             )
-            1 -> SmartIconRulesPanel(
+            else -> SmartIconRulesPanel(
                 settings = smartIconSettings,
-                lang = lang,
-                viewModel = viewModel
-            )
-            else -> ScreenFloatingCopiesPanel(
-                badges = badges,
-                prefs = prefs,
-                sampleTask = tasks.firstOrNull(),
                 lang = lang,
                 viewModel = viewModel
             )
@@ -1032,11 +1037,12 @@ private fun TaskCircleInteractivePreviewStage(
 }
 
 /* =========================================================================
-   TAB 2: FREE INDEPENDENT SCREEN COPIES (PRESERVED FULL STUDIO)
+   TAB 0: FLOATING ICONS MANAGER (LIST, TOGGLES, DELETE, RESTORE, RESET & STUDIO)
    ========================================================================= */
 @Composable
 private fun ScreenFloatingCopiesPanel(
     badges: List<FloatingBadgeItem>,
+    deletedBadges: List<FloatingBadgeItem>,
     prefs: UserPreferences,
     sampleTask: SmartTask?,
     lang: String,
@@ -1044,10 +1050,29 @@ private fun ScreenFloatingCopiesPanel(
 ) {
     val colors = LocalMNotesColors.current
     var selectedBadgeId by remember { mutableStateOf<String?>(badges.firstOrNull()?.id) }
+    var pendingDeleteBadge by remember { mutableStateOf<FloatingBadgeItem?>(null) }
+
+    if (pendingDeleteBadge != null) {
+        val target = pendingDeleteBadge!!
+        FloatingBadgeDeleteConfirmDialog(
+            badge = target,
+            lang = lang,
+            onConfirmDelete = {
+                pendingDeleteBadge = null
+                viewModel.deleteFloatingBadge(target.id)
+                if (selectedBadgeId == target.id) {
+                    selectedBadgeId = null
+                }
+            },
+            onDismiss = {
+                pendingDeleteBadge = null
+            }
+        )
+    }
 
     LaunchedEffect(badges) {
         if (selectedBadgeId != null && badges.none { it.id == selectedBadgeId }) {
-            selectedBadgeId = null
+            selectedBadgeId = badges.firstOrNull()?.id
         }
     }
 
@@ -1061,173 +1086,372 @@ private fun ScreenFloatingCopiesPanel(
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // 1. Floating Icons Management List + Restore & Reset Buttons
         Surface(
             shape = RoundedCornerShape(20.dp),
             color = colors.cardBg,
             modifier = Modifier
                 .fillMaxWidth()
                 .border(1.2.dp, colors.primary.copy(alpha = 0.35f), RoundedCornerShape(20.dp))
-                .testTag("floating_badge_live_preview_card")
+                .testTag("floating_icons_manager_card")
         ) {
             Column(
                 modifier = Modifier.padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = if (lang == "en") "Independent Screen Copies" else "أيقونات عائمة مستقلة على الشاشة",
-                        color = colors.textDark,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.ExtraBold
-                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = if (lang == "en") "Floating Icons" else "الأيقونات العائمة",
+                            color = colors.textDark,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                        Text(
+                            text = if (lang == "en") {
+                                "Drag on screen to move • Long-press or tap for menu"
+                            } else {
+                                "اسحب على الشاشة للتحريك • اضغط مطولاً أو نقرة للقائمة"
+                            },
+                            color = colors.textMuted,
+                            fontSize = 10.5.sp
+                        )
+                    }
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(999.dp))
                             .background(colors.primarySoft)
-                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                            .padding(horizontal = 9.dp, vertical = 4.dp)
                     ) {
                         Text(
                             text = "$visibleCount/${badges.size}",
                             color = colors.primary,
-                            fontSize = 10.sp,
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.ExtraBold
                         )
                     }
                 }
 
-                LiveFloatingIconPreviewStage(
-                    badges = badges,
-                    selectedBadgeId = selectedBadgeId,
-                    prefs = prefs,
-                    sampleTask = sampleTask,
-                    lang = lang,
-                    onSelectBadge = { id ->
-                        viewModel.playSound("nav")
-                        selectedBadgeId = toggleFloatingIconSelection(selectedBadgeId, id)
-                    },
-                    onDragBadge = { id, xFrac, yFrac ->
-                        selectedBadgeId = id
-                        viewModel.updateFloatingBadgePosition(id, xFrac, yFrac)
-                    }
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Button(
-                        onClick = {
-                            val stateToUse = selectedBadge?.state ?: "sleeping"
-                            val sizeToUse = selectedBadge?.sizeDp ?: 48f
-                            val newId = viewModel.addFloatingBadge(stateId = stateToUse, sizeDp = sizeToUse)
-                            selectedBadgeId = newId
-                        },
+                // List of all existing floating icons (Show/Hide toggle + Delete button)
+                if (badges.isEmpty()) {
+                    Surface(
                         shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
+                        color = colors.bgMain,
                         modifier = Modifier
-                            .weight(1.35f)
-                            .height(42.dp)
-                            .testTag("add_floating_badge_btn")
+                            .fillMaxWidth()
+                            .border(1.dp, colors.borderSoft, RoundedCornerShape(14.dp))
                     ) {
-                        Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(17.dp))
-                        Spacer(Modifier.width(4.dp))
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = if (lang == "en") "No floating icons on screen" else "لا توجد أيقونات عائمة على الشاشة حالياً",
+                                color = colors.textDark,
+                                fontSize = 12.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Center
+                            )
+                            Text(
+                                text = if (lang == "en") {
+                                    "Use \"Restore all deleted icons\" or add a new icon below."
+                                } else {
+                                    "استخدم \"استعادة جميع الأيقونات المحذوفة\" أو أضف أيقونة جديدة بالأسفل."
+                                },
+                                color = colors.textMuted,
+                                fontSize = 11.sp,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        badges.forEachIndexed { idx, item ->
+                            val isSelected = item.id == selectedBadgeId
+                            val spec = remember(item.state) { FloatingBadgeCatalog.byId(item.state) }
+                            val iconTitle = if (lang == "en") spec.nameEn else spec.nameAr
+
+                            Surface(
+                                shape = RoundedCornerShape(16.dp),
+                                color = if (isSelected) colors.primarySoft.copy(alpha = 0.55f) else colors.bgMain,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .border(
+                                        width = if (isSelected) 1.5.dp else 1.dp,
+                                        color = if (isSelected) colors.primary else colors.borderSoft,
+                                        shape = RoundedCornerShape(16.dp)
+                                    )
+                                    .clickable {
+                                        viewModel.playSound("nav")
+                                        selectedBadgeId = item.id
+                                    }
+                                    .testTag("floating_icon_row_${item.id}")
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(44.dp)
+                                            .clip(CircleShape)
+                                            .background(colors.cardBg)
+                                            .border(1.dp, colors.borderSoft, CircleShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        FloatingBadgeVisual(
+                                            iconId = item.state,
+                                            sizeDp = 34f,
+                                            contentDescription = iconTitle,
+                                            modifier = Modifier.alpha(if (item.visible) 1f else 0.35f)
+                                        )
+                                    }
+
+                                    Column(
+                                        modifier = Modifier.weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                                    ) {
+                                        Text(
+                                            text = if (lang == "en") "#${idx + 1} • $iconTitle" else "#${idx + 1} • $iconTitle",
+                                            color = colors.textDark,
+                                            fontSize = 12.5.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = if (item.visible) {
+                                                if (lang == "en") "Visible • ${item.sizeDp.roundToInt()}dp" else "ظاهرة • الحجم ${item.sizeDp.roundToInt()}"
+                                            } else {
+                                                if (lang == "en") "Hidden • ${item.sizeDp.roundToInt()}dp" else "مخفية • الحجم ${item.sizeDp.roundToInt()}"
+                                            },
+                                            color = if (item.visible) colors.primary else colors.textMuted,
+                                            fontSize = 10.5.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+
+                                    // Show / Hide toggle Switch
+                                    Switch(
+                                        checked = item.visible,
+                                        onCheckedChange = { checked ->
+                                            viewModel.setFloatingBadgeVisibility(item.id, checked)
+                                        },
+                                        colors = SwitchDefaults.colors(
+                                            checkedThumbColor = Color.White,
+                                            checkedTrackColor = colors.primary
+                                        ),
+                                        modifier = Modifier.testTag("floating_icon_toggle_${item.id}")
+                                    )
+
+                                    // Delete button (48dp touch target, opens confirmation dialog)
+                                    IconButton(
+                                        onClick = { pendingDeleteBadge = item },
+                                        modifier = Modifier
+                                            .size(48.dp)
+                                            .testTag("floating_icon_delete_${item.id}")
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(36.dp)
+                                                .clip(CircleShape)
+                                                .background(Color(0xFFFEE2E2))
+                                                .border(1.dp, Color(0xFFFECACA), CircleShape),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.DeleteOutline,
+                                                contentDescription = if (lang == "en") "Delete $iconTitle" else "حذف $iconTitle",
+                                                tint = Color(0xFFDC2626),
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Required Action Buttons: "Restore all deleted icons" & "Reset positions"
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = { viewModel.restoreAllDeletedFloatingBadges() },
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = colors.primary,
+                            contentColor = Color.White
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .testTag("floating_icons_restore_deleted_btn")
+                    ) {
+                        Icon(Icons.Rounded.Restore, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        val restoreLabel = if (deletedBadges.isNotEmpty()) {
+                            if (lang == "en") {
+                                "Restore all deleted icons (${deletedBadges.size})"
+                            } else {
+                                "استعادة جميع الأيقونات المحذوفة (${deletedBadges.size})"
+                            }
+                        } else {
+                            if (lang == "en") "Restore all deleted icons" else "استعادة جميع الأيقونات المحذوفة"
+                        }
                         Text(
-                            text = if (lang == "en") "Add Copy" else "إضافة نسخة",
-                            fontSize = 11.5.sp,
-                            fontWeight = FontWeight.ExtraBold
+                            text = restoreLabel,
+                            fontSize = 12.5.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
 
-                    if (badges.isNotEmpty()) {
-                        val allVisible = badges.all { it.visible }
-                        Box(
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { viewModel.resetAllFloatingBadgePositions() },
+                            enabled = badges.isNotEmpty(),
+                            shape = RoundedCornerShape(14.dp),
                             modifier = Modifier
-                                .weight(1f)
-                                .height(42.dp)
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(colors.bgMain)
-                                .border(1.dp, colors.borderSoft, RoundedCornerShape(14.dp))
-                                .clickable { viewModel.setAllFloatingBadgesVisibility(!allVisible) }
-                                .testTag("toggle_all_badges_visibility_btn"),
-                            contentAlignment = Alignment.Center
+                                .weight(1.15f)
+                                .height(48.dp)
+                                .testTag("floating_icons_reset_positions_btn")
                         ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(5.dp)
-                            ) {
-                                Icon(
-                                    imageVector = if (allVisible) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
-                                    contentDescription = null,
-                                    tint = colors.primary,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Text(
-                                    text = if (allVisible) {
-                                        if (lang == "en") "Hide All" else "إخفاء الكل"
-                                    } else {
-                                        if (lang == "en") "Show All" else "إظهار الكل"
-                                    },
-                                    color = colors.textDark,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
+                            Icon(
+                                imageVector = Icons.Rounded.RestartAlt,
+                                contentDescription = null,
+                                tint = if (badges.isNotEmpty()) colors.primary else colors.textMuted,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(5.dp))
+                            Text(
+                                text = if (lang == "en") "Reset positions" else "إعادة تعيين المواقع",
+                                color = if (badges.isNotEmpty()) colors.textDark else colors.textMuted,
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                val stateToUse = selectedBadge?.state ?: "sleeping"
+                                val sizeToUse = selectedBadge?.sizeDp ?: 46f
+                                val newId = viewModel.addFloatingBadge(stateId = stateToUse, sizeDp = sizeToUse)
+                                selectedBadgeId = newId
+                            },
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier
+                                .weight(0.85f)
+                                .height(48.dp)
+                                .testTag("add_floating_badge_btn")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Add,
+                                contentDescription = null,
+                                tint = colors.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = if (lang == "en") "Add Icon" else "إضافة أيقونة",
+                                color = colors.textDark,
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
                     }
                 }
             }
         }
 
+        // 2. Interactive Position Preview Stage
         if (badges.isNotEmpty()) {
-            Row(
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = colors.cardBg,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    .border(1.dp, colors.borderSoft, RoundedCornerShape(20.dp))
+                    .testTag("floating_badge_live_preview_card")
             ) {
-                badges.forEachIndexed { idx, item ->
-                    val isSelected = item.id == selectedBadgeId
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(999.dp))
-                            .background(if (isSelected) colors.primarySoft else colors.cardBg)
-                            .border(
-                                if (isSelected) 1.6.dp else 1.dp,
-                                if (isSelected) colors.primary else colors.borderSoft,
-                                RoundedCornerShape(999.dp)
-                            )
-                            .clickable {
-                                viewModel.playSound("nav")
-                                selectedBadgeId = toggleFloatingIconSelection(selectedBadgeId, item.id)
-                            }
-                            .padding(horizontal = 10.dp, vertical = 6.dp)
-                            .testTag("floating_copy_chip_${item.id}")
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        FloatingBadgeVisual(
-                            iconId = item.state,
-                            sizeDp = 24f,
-                            contentDescription = null,
-                            modifier = Modifier.alpha(if (item.visible) 1f else 0.4f)
-                        )
                         Text(
-                            text = if (lang == "en") "Copy #${idx + 1}" else "نسخة #${idx + 1}",
-                            color = if (isSelected) colors.primary else colors.textDark,
-                            fontSize = 11.sp,
+                            text = if (lang == "en") "Interactive Position Preview" else "معاينة تفاعلية لمواقع الأيقونات",
+                            color = colors.textDark,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.ExtraBold
                         )
+                        val allVisible = badges.all { it.visible }
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(colors.bgMain)
+                                .border(1.dp, colors.borderSoft, RoundedCornerShape(999.dp))
+                                .clickable { viewModel.setAllFloatingBadgesVisibility(!allVisible) }
+                                .padding(horizontal = 10.dp, vertical = 5.dp)
+                                .testTag("toggle_all_badges_visibility_btn")
+                        ) {
+                            Text(
+                                text = if (allVisible) {
+                                    if (lang == "en") "Hide All" else "إخفاء الكل"
+                                } else {
+                                    if (lang == "en") "Show All" else "إظهار الكل"
+                                },
+                                color = colors.primary,
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
+
+                    LiveFloatingIconPreviewStage(
+                        badges = badges,
+                        selectedBadgeId = selectedBadgeId,
+                        prefs = prefs,
+                        sampleTask = sampleTask,
+                        lang = lang,
+                        onSelectBadge = { id ->
+                            viewModel.playSound("nav")
+                            selectedBadgeId = toggleFloatingIconSelection(selectedBadgeId, id)
+                        },
+                        onDragBadge = { id, xFrac, yFrac ->
+                            selectedBadgeId = id
+                            viewModel.updateFloatingBadgePosition(id, xFrac, yFrac)
+                        }
+                    )
                 }
             }
         }
 
+        // 3. Customize Selected Floating Icon (Size, Lock, Duplicate, 160+ 3D Library)
         if (selectedBadge != null) {
-
             Surface(
                 shape = RoundedCornerShape(18.dp),
                 color = colors.cardBg,
@@ -1245,7 +1469,7 @@ private fun ScreenFloatingCopiesPanel(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = if (lang == "en") "Size (${selectedBadge.sizeDp.roundToInt()} dp)" else "الحجم (${selectedBadge.sizeDp.roundToInt()})",
+                            text = if (lang == "en") "Selected Icon Size (${selectedBadge.sizeDp.roundToInt()} dp)" else "حجم الأيقونة المحددة (${selectedBadge.sizeDp.roundToInt()})",
                             color = colors.textDark,
                             fontSize = 11.5.sp,
                             fontWeight = FontWeight.Bold
@@ -1271,9 +1495,17 @@ private fun ScreenFloatingCopiesPanel(
                     )
 
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
+                        CompactChipBtn(
+                            icon = Icons.Rounded.RestartAlt,
+                            label = if (lang == "en") "Reset Pos" else "موقع افتراضي",
+                            active = false,
+                            onClick = { viewModel.resetFloatingBadgePosition(selectedBadge.id) }
+                        )
                         CompactChipBtn(
                             icon = Icons.Rounded.ContentCopy,
                             label = if (lang == "en") "Duplicate" else "تكرار",
@@ -1282,16 +1514,6 @@ private fun ScreenFloatingCopiesPanel(
                                 val dupId = viewModel.duplicateFloatingBadge(selectedBadge.id)
                                 if (dupId != null) selectedBadgeId = dupId
                             }
-                        )
-                        CompactChipBtn(
-                            icon = if (selectedBadge.visible) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
-                            label = if (selectedBadge.visible) {
-                                if (lang == "en") "Hide" else "إخفاء"
-                            } else {
-                                if (lang == "en") "Show" else "إظهار"
-                            },
-                            active = false,
-                            onClick = { viewModel.toggleFloatingBadgeVisibility(selectedBadge.id) }
                         )
                         CompactChipBtn(
                             icon = if (selectedBadge.locked) Icons.Rounded.Lock else Icons.Rounded.LockOpen,
@@ -1308,14 +1530,14 @@ private fun ScreenFloatingCopiesPanel(
                                 .clip(RoundedCornerShape(999.dp))
                                 .background(Color(0xFFFEF2F2))
                                 .border(1.dp, Color(0xFFFECACA), RoundedCornerShape(999.dp))
-                                .clickable { viewModel.deleteFloatingBadge(selectedBadge.id) }
+                                .clickable { pendingDeleteBadge = selectedBadge }
                                 .padding(horizontal = 10.dp, vertical = 6.dp)
                         ) {
                             Icon(Icons.Rounded.DeleteOutline, contentDescription = "Delete", tint = Color(0xFFEF4444), modifier = Modifier.size(15.dp))
                         }
                     }
 
-                    // Icon picker for selected screen copy
+                    // Icon picker for selected floating icon
                     OutlinedTextField(
                         value = searchQuery,
                         onValueChange = { searchQuery = it },

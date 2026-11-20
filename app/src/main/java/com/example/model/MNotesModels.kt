@@ -232,15 +232,37 @@ data class TrimmedRingtone(
     val durationSec: Int
 )
 
+object FloatingBadgeDefaults {
+    /**
+     * Safe peripheral screen positions (normalized fractions inside system-bar-safe insets)
+     * chosen to stay clear of the top HeroBanner, task action buttons, and bottom dock.
+     */
+    val safeSlots: List<Pair<Float, Float>> = listOf(
+        0.86f to 0.78f,
+        0.04f to 0.78f,
+        0.86f to 0.60f,
+        0.04f to 0.60f,
+        0.86f to 0.42f,
+        0.04f to 0.42f
+    )
+
+    fun slotForIndex(index: Int): Pair<Float, Float> {
+        val safeIdx = ((index % safeSlots.size) + safeSlots.size) % safeSlots.size
+        return safeSlots[safeIdx]
+    }
+}
+
 @Serializable
 data class FloatingBadgeItem(
     val id: String,
     val state: String = "sleeping",
-    val xFraction: Float = 0.82f,
-    val yFraction: Float = 0.14f,
+    val xFraction: Float = 0.86f,
+    val yFraction: Float = 0.78f,
     val sizeDp: Float = 46f,
     val visible: Boolean = true,
-    val locked: Boolean = false
+    val locked: Boolean = false,
+    val defaultXFraction: Float = 0.86f,
+    val defaultYFraction: Float = 0.78f
 )
 
 @Serializable
@@ -384,6 +406,7 @@ data class BackupSnapshotPayload(
     val tasks: List<BackupTaskDto> = emptyList(),
     val requests: List<BackupRequestDto> = emptyList(),
     val floatingBadges: List<FloatingBadgeItem> = emptyList(),
+    val deletedFloatingBadges: List<FloatingBadgeItem> = emptyList(),
     val smartIconSettings: SmartIconSettings = SmartIconSettings()
 )
 

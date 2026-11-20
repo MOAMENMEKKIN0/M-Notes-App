@@ -317,4 +317,69 @@ class AppCriticalFlowsRobolectricTest {
         TaskAlarmScheduler.cancelTaskAlarm(context, taskId)
         assertFalse(repo.getTasksSnapshot().any { it.id == taskId })
     }
+
+    @Test
+    fun floatingIcons_deletePersistRestoreResetAndSafeDefaults_workAcrossRestart() = runBlocking {
+        val repo1 = LocalStoreRepository(context)
+        repo1.ensureInitialized()
+
+        // Add two icons cleanly in safe peripheral slots (away from top banner area y >= 0.40)
+        val id1 = repo1.addFloatingBadge(stateId = "bald_exp_cool", sizeDp = 52f).getOrThrow()
+        val id2 = repo1.addFloatingBadge(stateId = "gym_dumbbell_mint", sizeDp = 48f).getOrThrow()
+
+        val initialBadges = repo1.getFloatingBadgesSnapshot()
+        val b1Init = initialBadges.first { it.id == id1 }
+        val b2Init = initialBadges.first { it.id == id2 }
+        assertTrue("Default slot 1 must stay clear of top banner", b1Init.defaultYFraction >= 0.40f)
+        assertTrue("Default slot 2 must stay clear of top banner", b2Init.defaultYFraction >= 0.40f)
+
+        // 1. Drag icon 1 to custom position & toggle icon 2 hidden -> persist across restart
+        repo1.updateFloatingBadge(id1) { it.copy(xFraction = 0.25f, yFraction = 0.50f) }
+        repo1.updateFloatingBadge(id2) { it.copy(visible = false) }
+
+        val repoAfterDrag = LocalStoreRepository(context)
+        val dragged1 = repoAfterDrag.getFloatingBadgesSnapshot().first { it.id == id1 }
+        val hidden2 = repoAfterDrag.getFloatingBadgesSnapshot().first { it.id == id2 }
+        assertEquals(0.25f, dragged1.xFraction, 0.001f)
+        assertEquals(0.50f, dragged1.yFraction, 0.001f)
+        assertFalse("Show/hide toggle must persist across restart", hidden2.visible)
+
+        // 2. Single icon "Reset to default position" restores its default coordinates
+        repoAfterDrag.resetFloatingBadgePosition(id1)
+        val afterSingleReset = LocalStoreRepository(context).getFloatingBadgesSnapshot().first { it.id == id1 }
+        assertEquals(b1Init.defaultXFraction, afterSingleReset.xFraction, 0.001f)
+        assertEquals(b1Init.defaultYFraction, afterSingleReset.yFraction, 0.001f)
+
+        // 3. Global "Reset positions" puts all icons in safe non-overlapping slots
+        repoAfterDrag.updateFloatingBadge(id1) { it.copy(xFraction = 0.50f, yFraction = 0.12f) }
+        repoAfterDrag.updateFloatingBadge(id2) { it.copy(xFraction = 0.50f, yFraction = 0.12f) }
+        repoAfterDrag.resetAllFloatingBadgePositions()
+        val afterGlobalReset = LocalStoreRepository(context).getFloatingBadgesSnapshot()
+        assertTrue(afterGlobalReset.all { it.yFraction >= 0.40f })
+
+        // 4. Delete ALL icons -> simulate restart + ensureInitialized() -> MUST stay deleted!
+        val allIds = afterGlobalReset.map { it.id }
+        allIds.forEach { repoAfterDrag.deleteFloatingBadge(it) }
+
+        val repoAfterRestart = LocalStoreRepository(context)
+        repoAfterRestart.ensureInitialized()
+        assertTrue(
+            "Deleted icons must stay deleted after reopening the app",
+            repoAfterRestart.getFloatingBadgesSnapshot().isEmpty()
+        )
+        assertEquals(
+            "Deleted icons must be stored so they can be restored",
+            allIds.size,
+            repoAfterRestart.getDeletedFloatingBadgesSnapshot().size
+        )
+
+        // 5. "Restore all deleted icons" restores every deleted icon visible & clears deleted list
+        repoAfterRestart.restoreAllDeletedFloatingBadges()
+        val repoAfterRestore = LocalStoreRepository(context)
+        val restoredBadges = repoAfterRestore.getFloatingBadgesSnapshot()
+        assertEquals(allIds.size, restoredBadges.size)
+        assertTrue("All restored icons must be visible", restoredBadges.all { it.visible })
+        assertTrue(repoAfterRestore.getDeletedFloatingBadgesSnapshot().isEmpty())
+    }
 }
+

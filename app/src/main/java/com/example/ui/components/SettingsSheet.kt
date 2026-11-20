@@ -150,6 +150,7 @@ fun SettingsSheet(
     val safeDismisser = rememberSafeSheetDismisser(sheetState, onDismiss)
     val connectedEmail by viewModel.connectedEmail.collectAsStateWithLifecycle()
     val floatingBadges by viewModel.floatingBadges.collectAsStateWithLifecycle()
+    val deletedFloatingBadges by viewModel.deletedFloatingBadges.collectAsStateWithLifecycle()
     val smartIconSettings by viewModel.smartIconSettings.collectAsStateWithLifecycle()
     val lastBackupStatus by viewModel.lastBackupStatus.collectAsStateWithLifecycle()
     val lastBackupError by viewModel.lastBackupError.collectAsStateWithLifecycle()
@@ -2133,10 +2134,10 @@ fun SettingsSheet(
                 )
             }
 
-            // 10. Dedicated Floating Circular Icon Studio (Interactive Preview + 160+ Icons incl. Bald Male 3D Expressions)
+            // 10. Dedicated Floating Icons Settings Page (Manage, Show/Hide, Delete, Restore, Reset & 3D Library)
             SettingsFolder(
-                title = if (lang == "en") "Floating Circular Icon & 3D Library" else "الأيقونة الدائرية العائمة (مكتبة 160+ أيقونة وشخصيات 3D)",
-                subtitle = if (lang == "en") "Bald male Pixar 3D expressions, gym icons, drag, toggle & save" else "تعبيرات وشخصيات رجال 3D Pixar + أيقونات الجيم + سحب وتحديد وحفظ فوري",
+                title = if (lang == "en") "Floating Icons" else "الأيقونات العائمة",
+                subtitle = if (lang == "en") "Show/hide, delete, restore deleted icons, reset positions & 3D library" else "إظهار وإخفاء وحذف واستعادة الأيقونات العائمة وإعادة تعيين المواقع",
                 icon = Icons.Rounded.Mood,
                 isOpen = openFolder == "characterBadge",
                 lang = lang,
@@ -2149,6 +2150,7 @@ fun SettingsSheet(
                     tasks = tasks,
                     smartIconSettings = smartIconSettings,
                     badges = floatingBadges,
+                    deletedBadges = deletedFloatingBadges,
                     prefs = prefs,
                     lang = lang,
                     viewModel = viewModel,

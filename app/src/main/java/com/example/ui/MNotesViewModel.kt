@@ -12,6 +12,7 @@ import com.example.localization.AppStrings
 import com.example.model.BackupPreferencesDto
 import com.example.model.BackupSnapshotPayload
 import com.example.model.BackupTaskDto
+import com.example.model.FloatingBadgeDefaults
 import com.example.model.FloatingBadgeItem
 import com.example.model.LibraryPhoto
 import com.example.model.RepeatMode
@@ -100,10 +101,17 @@ class MNotesViewModel(
     private val _floatingBadges = MutableStateFlow<List<FloatingBadgeItem>>(emptyList())
     val floatingBadges: StateFlow<List<FloatingBadgeItem>> = _floatingBadges.asStateFlow()
 
+    private val _deletedFloatingBadges = MutableStateFlow<List<FloatingBadgeItem>>(emptyList())
+    val deletedFloatingBadges: StateFlow<List<FloatingBadgeItem>> = _deletedFloatingBadges.asStateFlow()
+
     private val _smartIconSettings = MutableStateFlow(SmartIconSettings())
     val smartIconSettings: StateFlow<SmartIconSettings> = _smartIconSettings.asStateFlow()
 
     private val inFlightBadgeWrites = AtomicInteger(0)
+    @Volatile
+    private var hasLoadedInitialBadges = false
+    @Volatile
+    private var hasLoadedInitialDeletedBadges = false
     private var autoBackupDebounceJob: Job? = null
     @Volatile
     private var lastSmartSettingsMutationAtMs: Long = 0L
@@ -149,8 +157,17 @@ class MNotesViewModel(
         }
         viewModelScope.launch {
             localStore.floatingBadgesFlow.collect { stored ->
-                if (inFlightBadgeWrites.get() == 0 || _floatingBadges.value.isEmpty()) {
+                if (inFlightBadgeWrites.get() == 0 || !hasLoadedInitialBadges) {
+                    hasLoadedInitialBadges = true
                     _floatingBadges.value = stored
+                }
+            }
+        }
+        viewModelScope.launch {
+            localStore.deletedFloatingBadgesFlow.collect { stored ->
+                if (inFlightBadgeWrites.get() == 0 || !hasLoadedInitialDeletedBadges) {
+                    hasLoadedInitialDeletedBadges = true
+                    _deletedFloatingBadges.value = stored
                 }
             }
         }
@@ -236,22 +253,54 @@ class MNotesViewModel(
         }
     }
 
+    private fun normalizeFloatingBadge(b: FloatingBadgeItem): FloatingBadgeItem = b.copy(
+        xFraction = b.xFraction.coerceIn(0f, 1f),
+        yFraction = b.yFraction.coerceIn(0f, 1f),
+        sizeDp = b.sizeDp.coerceIn(26f, 180f),
+        defaultXFraction = b.defaultXFraction.coerceIn(0f, 1f),
+        defaultYFraction = b.defaultYFraction.coerceIn(0f, 1f)
+    )
+
     private fun commitFloatingBadgesOptimistic(
         updated: List<FloatingBadgeItem>,
         toastOnSaved: String? = null
     ) {
-        val normalized = updated.map { b ->
-            b.copy(
-                xFraction = b.xFraction.coerceIn(0f, 1f),
-                yFraction = b.yFraction.coerceIn(0f, 1f),
-                sizeDp = b.sizeDp.coerceIn(26f, 180f)
-            )
-        }
+        val normalized = updated.map { normalizeFloatingBadge(it) }
+        hasLoadedInitialBadges = true
         _floatingBadges.value = normalized
         inFlightBadgeWrites.incrementAndGet()
         viewModelScope.launch {
             try {
                 val res = localStore.saveFloatingBadges(normalized)
+                if (res.isSuccess) {
+                    scheduleDebouncedAutoBackup()
+                    if (!toastOnSaved.isNullOrBlank()) {
+                        _toastMessage.tryEmit(toastOnSaved)
+                    }
+                } else {
+                    _toastMessage.tryEmit(res.exceptionOrNull()?.localizedMessage ?: "Failed to save icon")
+                }
+            } finally {
+                inFlightBadgeWrites.decrementAndGet()
+            }
+        }
+    }
+
+    private fun commitFloatingBadgesAndDeletedOptimistic(
+        updated: List<FloatingBadgeItem>,
+        updatedDeleted: List<FloatingBadgeItem>,
+        toastOnSaved: String? = null
+    ) {
+        val normalized = updated.map { normalizeFloatingBadge(it) }
+        val normalizedDeleted = updatedDeleted.map { normalizeFloatingBadge(it) }
+        hasLoadedInitialBadges = true
+        hasLoadedInitialDeletedBadges = true
+        _floatingBadges.value = normalized
+        _deletedFloatingBadges.value = normalizedDeleted
+        inFlightBadgeWrites.incrementAndGet()
+        viewModelScope.launch {
+            try {
+                val res = localStore.saveFloatingBadgesAndDeleted(normalized, normalizedDeleted)
                 if (res.isSuccess) {
                     scheduleDebouncedAutoBackup()
                     if (!toastOnSaved.isNullOrBlank()) {
@@ -917,10 +966,8 @@ class MNotesViewModel(
     fun addFloatingBadge(stateId: String = "sleeping", sizeDp: Float = 46f): String {
         playSound("done")
         val current = _floatingBadges.value
-        val count = current.size
         val newId = "badge_${UUID.randomUUID().toString().take(8)}"
-        val x = (0.78f - (count % 4) * 0.14f).coerceIn(0.10f, 0.86f)
-        val y = (0.16f + (count / 4) * 0.10f + (count % 3) * 0.05f).coerceIn(0.10f, 0.82f)
+        val (x, y) = FloatingBadgeDefaults.slotForIndex(current.size)
         val item = FloatingBadgeItem(
             id = newId,
             state = stateId,
@@ -928,7 +975,9 @@ class MNotesViewModel(
             yFraction = y,
             sizeDp = sizeDp.coerceIn(26f, 180f),
             visible = true,
-            locked = false
+            locked = false,
+            defaultXFraction = x,
+            defaultYFraction = y
         )
         commitFloatingBadgesOptimistic(current + item)
         return newId
@@ -939,14 +988,15 @@ class MNotesViewModel(
         val current = _floatingBadges.value
         val source = current.firstOrNull { it.id == badgeId } ?: return null
         val newId = "badge_${UUID.randomUUID().toString().take(8)}"
-        val nextX = if (source.xFraction + 0.09f <= 0.88f) source.xFraction + 0.09f else (source.xFraction - 0.11f).coerceAtLeast(0.06f)
-        val nextY = if (source.yFraction + 0.07f <= 0.86f) source.yFraction + 0.07f else (source.yFraction - 0.09f).coerceAtLeast(0.08f)
+        val (slotX, slotY) = FloatingBadgeDefaults.slotForIndex(current.size)
         val copy = source.copy(
             id = newId,
-            xFraction = nextX,
-            yFraction = nextY,
+            xFraction = slotX,
+            yFraction = slotY,
             visible = true,
-            locked = false
+            locked = false,
+            defaultXFraction = slotX,
+            defaultYFraction = slotY
         )
         commitFloatingBadgesOptimistic(current + copy)
         return newId
@@ -1010,6 +1060,14 @@ class MNotesViewModel(
         commitFloatingBadgesOptimistic(updated)
     }
 
+    fun setFloatingBadgeVisibility(badgeId: String, visible: Boolean) {
+        playSound("nav")
+        val updated = _floatingBadges.value.map { cur ->
+            if (cur.id == badgeId) cur.copy(visible = visible) else cur
+        }
+        commitFloatingBadgesOptimistic(updated)
+    }
+
     fun toggleFloatingBadgeLock(badgeId: String) {
         playSound("nav")
         val updated = _floatingBadges.value.map { cur ->
@@ -1024,10 +1082,98 @@ class MNotesViewModel(
         commitFloatingBadgesOptimistic(updated)
     }
 
+    fun resetFloatingBadgePosition(badgeId: String) {
+        playSound("done")
+        val lang = preferences.value.lang
+        val updated = _floatingBadges.value.map { cur ->
+            if (cur.id == badgeId) {
+                cur.copy(
+                    xFraction = cur.defaultXFraction.coerceIn(0f, 1f),
+                    yFraction = cur.defaultYFraction.coerceIn(0f, 1f)
+                )
+            } else cur
+        }
+        commitFloatingBadgesOptimistic(
+            updated = updated,
+            toastOnSaved = if (lang == "en") "Icon reset to default position" else "تمت إعادة الأيقونة للموقع الافتراضي"
+        )
+    }
+
+    fun resetAllFloatingBadgePositions() {
+        playSound("done")
+        val lang = preferences.value.lang
+        val updated = _floatingBadges.value.mapIndexed { idx, cur ->
+            val (slotX, slotY) = FloatingBadgeDefaults.slotForIndex(idx)
+            cur.copy(
+                xFraction = slotX,
+                yFraction = slotY,
+                defaultXFraction = slotX,
+                defaultYFraction = slotY
+            )
+        }
+        commitFloatingBadgesOptimistic(
+            updated = updated,
+            toastOnSaved = if (lang == "en") "All floating icon positions reset!" else "تمت إعادة تعيين جميع مواقع الأيقونات العائمة!"
+        )
+    }
+
     fun deleteFloatingBadge(badgeId: String) {
         playSound("exit")
-        val updated = _floatingBadges.value.filterNot { it.id == badgeId }
-        commitFloatingBadgesOptimistic(updated)
+        val lang = preferences.value.lang
+        val current = _floatingBadges.value
+        val target = current.firstOrNull { it.id == badgeId }
+        val remaining = current.filterNot { it.id == badgeId }
+        val nextDeleted = if (target != null) {
+            _deletedFloatingBadges.value.filterNot { it.id == target.id } + target
+        } else {
+            _deletedFloatingBadges.value
+        }
+        commitFloatingBadgesAndDeletedOptimistic(
+            updated = remaining,
+            updatedDeleted = nextDeleted,
+            toastOnSaved = if (lang == "en") "Floating icon deleted" else "تم حذف الأيقونة العائمة"
+        )
+    }
+
+    fun restoreAllDeletedFloatingBadges() {
+        playSound("done")
+        val lang = preferences.value.lang
+        val current = _floatingBadges.value
+        val existingIds = current.map { it.id }.toSet()
+        val toRestore = _deletedFloatingBadges.value
+            .filterNot { it.id in existingIds }
+            .map { it.copy(visible = true) }
+
+        val restoredList = when {
+            toRestore.isNotEmpty() -> current + toRestore
+            current.isEmpty() -> {
+                val (dx, dy) = FloatingBadgeDefaults.slotForIndex(0)
+                listOf(
+                    FloatingBadgeItem(
+                        id = "badge_original_1",
+                        state = "sleeping",
+                        xFraction = dx,
+                        yFraction = dy,
+                        sizeDp = 46f,
+                        visible = true,
+                        locked = false,
+                        defaultXFraction = dx,
+                        defaultYFraction = dy
+                    )
+                )
+            }
+            else -> current
+        }
+        val restoredCount = restoredList.size - current.size
+        commitFloatingBadgesAndDeletedOptimistic(
+            updated = restoredList,
+            updatedDeleted = emptyList(),
+            toastOnSaved = if (restoredCount > 0) {
+                if (lang == "en") "Restored $restoredCount deleted icon(s)!" else "تمت استعادة $restoredCount أيقونة محذوفة بنجاح!"
+            } else {
+                if (lang == "en") "No deleted icons to restore" else "لا توجد أيقونات محذوفة للاستعادة"
+            }
+        )
     }
 
     suspend fun cropAndSavePhoto(
@@ -1210,6 +1356,7 @@ class MNotesViewModel(
             },
             requests = emptyList(),
             floatingBadges = floatingBadges.value,
+            deletedFloatingBadges = deletedFloatingBadges.value,
             smartIconSettings = smartIconSettings.value
         )
     }
@@ -1231,8 +1378,9 @@ class MNotesViewModel(
             if (res.isSuccess) {
                 lastSmartSettingsMutationAtMs = 0L
                 _smartIconSettings.value = snapshot.smartIconSettings
-                if (snapshot.floatingBadges.isNotEmpty()) {
+                if (snapshot.floatingBadges.isNotEmpty() || snapshot.deletedFloatingBadges.isNotEmpty()) {
                     _floatingBadges.value = snapshot.floatingBadges
+                    _deletedFloatingBadges.value = snapshot.deletedFloatingBadges
                 }
                 playSound("done")
                 _toastMessage.tryEmit(AppStrings.get(lang, "jsonImported"))
@@ -1309,8 +1457,9 @@ class MNotesViewModel(
                     val snapshot = parsed.getOrThrow()
                     val res = localStore.restoreFromSnapshot(snapshot)
                     if (res.isSuccess) {
-                        if (snapshot.floatingBadges.isNotEmpty()) {
+                        if (snapshot.floatingBadges.isNotEmpty() || snapshot.deletedFloatingBadges.isNotEmpty()) {
                             _floatingBadges.value = snapshot.floatingBadges
+                            _deletedFloatingBadges.value = snapshot.deletedFloatingBadges
                         }
                         lastSmartSettingsMutationAtMs = 0L
                         _smartIconSettings.value = snapshot.smartIconSettings

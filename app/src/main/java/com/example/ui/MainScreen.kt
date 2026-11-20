@@ -395,7 +395,7 @@ fun MainScreen(viewModel: MNotesViewModel) {
                 }
             }
 
-            // Independent Draggable, Resizable, Toggle-Selectable Small Floating Circular Icon(s)
+            // Independent Draggable, Resizable, Long-Press/Tap Menu Floating Circular Icon(s)
             FloatingCharacterBadgesOverlay(
                 badges = floatingBadges,
                 selectedBadgeId = selectedFloatingBadgeId,
@@ -407,10 +407,20 @@ fun MainScreen(viewModel: MNotesViewModel) {
                         tappedId = tappedBadge.id
                     )
                 },
+                onSelectBadge = { heldBadge ->
+                    viewModel.playSound("nav")
+                    selectedFloatingBadgeId = heldBadge.id
+                },
+                onDismissSelection = {
+                    selectedFloatingBadgeId = null
+                },
                 onOpenBadgeLibrary = { tappedBadge ->
                     viewModel.playSound("enter")
                     selectedFloatingBadgeId = null
                     libraryTargetBadgeId = tappedBadge.id
+                },
+                onResetBadgePosition = { targetBadge ->
+                    viewModel.resetFloatingBadgePosition(targetBadge.id)
                 },
                 onDuplicateBadge = { tappedBadge ->
                     val dupId = viewModel.duplicateFloatingBadge(tappedBadge.id)

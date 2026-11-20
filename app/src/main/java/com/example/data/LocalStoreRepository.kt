@@ -8,6 +8,7 @@ import com.example.localization.AppStrings
 import com.example.model.BackupPreferencesDto
 import com.example.model.BackupSnapshotPayload
 import com.example.model.BackupTaskDto
+import com.example.model.FloatingBadgeDefaults
 import com.example.model.FloatingBadgeItem
 import com.example.model.RepeatMode
 import com.example.model.SmartIconSettings
@@ -59,6 +60,7 @@ private data class LocalWorkspaceState(
     val tasks: List<LocalTaskDto> = emptyList(),
     val floatingBadgesInitialized: Boolean = false,
     val floatingBadges: List<FloatingBadgeItem> = emptyList(),
+    val deletedFloatingBadges: List<FloatingBadgeItem> = emptyList(),
     val smartIconSettings: SmartIconSettings = SmartIconSettings()
 )
 
@@ -187,6 +189,10 @@ class LocalStoreRepository(private val context: Context) {
         state.floatingBadges
     }
 
+    val deletedFloatingBadgesFlow: Flow<List<FloatingBadgeItem>> = stateFlow.map { state ->
+        state.deletedFloatingBadges
+    }
+
     val smartIconSettingsFlow: Flow<SmartIconSettings> = stateFlow.map { state ->
         state.smartIconSettings
     }
@@ -197,16 +203,25 @@ class LocalStoreRepository(private val context: Context) {
 
     suspend fun getFloatingBadgesSnapshot(): List<FloatingBadgeItem> = floatingBadgesFlow.first()
 
-    suspend fun ensureInitialized(): Result<Unit> = runWorkspaceEdit { state ->
-        val defaultBadge = FloatingBadgeItem(
+    suspend fun getDeletedFloatingBadgesSnapshot(): List<FloatingBadgeItem> = deletedFloatingBadgesFlow.first()
+
+    private fun defaultStarterBadge(): FloatingBadgeItem {
+        val (dx, dy) = FloatingBadgeDefaults.slotForIndex(0)
+        return FloatingBadgeItem(
             id = "badge_original_1",
             state = "sleeping",
-            xFraction = 0.82f,
-            yFraction = 0.14f,
+            xFraction = dx,
+            yFraction = dy,
             sizeDp = 46f,
             visible = true,
-            locked = false
+            locked = false,
+            defaultXFraction = dx,
+            defaultYFraction = dy
         )
+    }
+
+    suspend fun ensureInitialized(): Result<Unit> = runWorkspaceEdit { state ->
+        val defaultBadge = defaultStarterBadge()
         if (state.initialized) {
             return@runWorkspaceEdit if (!state.floatingBadgesInitialized) {
                 state.copy(
@@ -531,15 +546,21 @@ class LocalStoreRepository(private val context: Context) {
         state.copy(tasks = state.tasks.filterNot { it.id == taskId })
     }
 
+    private fun normalizeBadge(b: FloatingBadgeItem): FloatingBadgeItem = b.copy(
+        xFraction = b.xFraction.coerceIn(0f, 1f),
+        yFraction = b.yFraction.coerceIn(0f, 1f),
+        sizeDp = b.sizeDp.coerceIn(26f, 180f),
+        defaultXFraction = b.defaultXFraction.coerceIn(0f, 1f),
+        defaultYFraction = b.defaultYFraction.coerceIn(0f, 1f)
+    )
+
     suspend fun addFloatingBadge(
         stateId: String = "sleeping",
         sizeDp: Float = 46f
     ): Result<String> {
         val newId = "badge_${UUID.randomUUID().toString().take(8)}"
         val res = runWorkspaceEdit { state ->
-            val count = state.floatingBadges.size
-            val x = (0.78f - (count % 4) * 0.14f).coerceIn(0.10f, 0.86f)
-            val y = (0.16f + (count / 4) * 0.10f + (count % 3) * 0.05f).coerceIn(0.10f, 0.82f)
+            val (x, y) = FloatingBadgeDefaults.slotForIndex(state.floatingBadges.size)
             val item = FloatingBadgeItem(
                 id = newId,
                 state = stateId,
@@ -547,7 +568,9 @@ class LocalStoreRepository(private val context: Context) {
                 yFraction = y,
                 sizeDp = sizeDp.coerceIn(26f, 180f),
                 visible = true,
-                locked = false
+                locked = false,
+                defaultXFraction = x,
+                defaultYFraction = y
             )
             state.copy(
                 floatingBadgesInitialized = true,
@@ -562,14 +585,15 @@ class LocalStoreRepository(private val context: Context) {
         val res = runWorkspaceEdit { state ->
             val source = state.floatingBadges.firstOrNull { it.id == badgeId }
                 ?: return@runWorkspaceEdit state
-            val nextX = if (source.xFraction + 0.08f <= 0.88f) source.xFraction + 0.08f else (source.xFraction - 0.10f).coerceAtLeast(0.06f)
-            val nextY = if (source.yFraction + 0.06f <= 0.86f) source.yFraction + 0.06f else (source.yFraction - 0.08f).coerceAtLeast(0.08f)
+            val (slotX, slotY) = FloatingBadgeDefaults.slotForIndex(state.floatingBadges.size)
             val copy = source.copy(
                 id = newId,
-                xFraction = nextX,
-                yFraction = nextY,
+                xFraction = slotX,
+                yFraction = slotY,
                 visible = true,
-                locked = false
+                locked = false,
+                defaultXFraction = slotX,
+                defaultYFraction = slotY
             )
             state.copy(
                 floatingBadgesInitialized = true,
@@ -585,12 +609,7 @@ class LocalStoreRepository(private val context: Context) {
     ): Result<Unit> = runWorkspaceEdit { state ->
         val updated = state.floatingBadges.map { existing ->
             if (existing.id == badgeId) {
-                val next = transform(existing)
-                next.copy(
-                    xFraction = next.xFraction.coerceIn(0f, 1f),
-                    yFraction = next.yFraction.coerceIn(0f, 1f),
-                    sizeDp = next.sizeDp.coerceIn(26f, 180f)
-                )
+                normalizeBadge(transform(existing))
             } else {
                 existing
             }
@@ -606,22 +625,78 @@ class LocalStoreRepository(private val context: Context) {
     }
 
     suspend fun deleteFloatingBadge(badgeId: String): Result<Unit> = runWorkspaceEdit { state ->
+        val target = state.floatingBadges.firstOrNull { it.id == badgeId }
+        val remaining = state.floatingBadges.filterNot { it.id == badgeId }
+        val nextDeleted = if (target != null) {
+            state.deletedFloatingBadges.filterNot { it.id == target.id } + target
+        } else {
+            state.deletedFloatingBadges
+        }
         state.copy(
             floatingBadgesInitialized = true,
-            floatingBadges = state.floatingBadges.filterNot { it.id == badgeId }
+            floatingBadges = remaining,
+            deletedFloatingBadges = nextDeleted
+        )
+    }
+
+    suspend fun resetFloatingBadgePosition(badgeId: String): Result<Unit> = runWorkspaceEdit { state ->
+        val updated = state.floatingBadges.mapIndexed { idx, existing ->
+            if (existing.id == badgeId) {
+                val dx = existing.defaultXFraction.coerceIn(0f, 1f)
+                val dy = existing.defaultYFraction.coerceIn(0f, 1f)
+                existing.copy(xFraction = dx, yFraction = dy)
+            } else {
+                existing
+            }
+        }
+        state.copy(floatingBadgesInitialized = true, floatingBadges = updated)
+    }
+
+    suspend fun resetAllFloatingBadgePositions(): Result<Unit> = runWorkspaceEdit { state ->
+        val updated = state.floatingBadges.mapIndexed { idx, existing ->
+            val (slotX, slotY) = FloatingBadgeDefaults.slotForIndex(idx)
+            existing.copy(
+                xFraction = slotX,
+                yFraction = slotY,
+                defaultXFraction = slotX,
+                defaultYFraction = slotY
+            )
+        }
+        state.copy(floatingBadgesInitialized = true, floatingBadges = updated)
+    }
+
+    suspend fun restoreAllDeletedFloatingBadges(): Result<Unit> = runWorkspaceEdit { state ->
+        val existingIds = state.floatingBadges.map { it.id }.toSet()
+        val toRestore = state.deletedFloatingBadges
+            .filterNot { it.id in existingIds }
+            .map { normalizeBadge(it.copy(visible = true)) }
+        val combined = when {
+            toRestore.isNotEmpty() -> state.floatingBadges + toRestore
+            state.floatingBadges.isEmpty() -> listOf(defaultStarterBadge())
+            else -> state.floatingBadges
+        }
+        state.copy(
+            floatingBadgesInitialized = true,
+            floatingBadges = combined,
+            deletedFloatingBadges = emptyList()
         )
     }
 
     suspend fun saveFloatingBadges(badges: List<FloatingBadgeItem>): Result<Unit> = runWorkspaceEdit { state ->
         state.copy(
             floatingBadgesInitialized = true,
-            floatingBadges = badges.map { b ->
-                b.copy(
-                    xFraction = b.xFraction.coerceIn(0f, 1f),
-                    yFraction = b.yFraction.coerceIn(0f, 1f),
-                    sizeDp = b.sizeDp.coerceIn(26f, 180f)
-                )
-            }
+            floatingBadges = badges.map { normalizeBadge(it) }
+        )
+    }
+
+    suspend fun saveFloatingBadgesAndDeleted(
+        badges: List<FloatingBadgeItem>,
+        deletedBadges: List<FloatingBadgeItem>
+    ): Result<Unit> = runWorkspaceEdit { state ->
+        state.copy(
+            floatingBadgesInitialized = true,
+            floatingBadges = badges.map { normalizeBadge(it) },
+            deletedFloatingBadges = deletedBadges.map { normalizeBadge(it) }
         )
     }
 
@@ -680,16 +755,15 @@ class LocalStoreRepository(private val context: Context) {
             preferences = normalizedPrefs,
             tasks = restoredTasks,
             floatingBadgesInitialized = true,
-            floatingBadges = if (snapshot.floatingBadges.isNotEmpty()) {
-                snapshot.floatingBadges.map { b ->
-                    b.copy(
-                        xFraction = b.xFraction.coerceIn(0f, 1f),
-                        yFraction = b.yFraction.coerceIn(0f, 1f),
-                        sizeDp = b.sizeDp.coerceIn(26f, 180f)
-                    )
-                }
+            floatingBadges = if (snapshot.floatingBadges.isNotEmpty() || snapshot.deletedFloatingBadges.isNotEmpty()) {
+                snapshot.floatingBadges.map { normalizeBadge(it) }
             } else {
                 state.floatingBadges
+            },
+            deletedFloatingBadges = if (snapshot.deletedFloatingBadges.isNotEmpty() || snapshot.floatingBadges.isNotEmpty()) {
+                snapshot.deletedFloatingBadges.map { normalizeBadge(it) }
+            } else {
+                state.deletedFloatingBadges
             },
             smartIconSettings = snapshot.smartIconSettings
         )
