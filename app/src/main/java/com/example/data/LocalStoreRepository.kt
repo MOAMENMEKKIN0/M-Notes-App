@@ -6,13 +6,9 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.example.localization.AppStrings
 import com.example.model.BackupPreferencesDto
-import com.example.model.BackupRequestDto
 import com.example.model.BackupSnapshotPayload
 import com.example.model.BackupTaskDto
-import com.example.model.ChecklistOrderItem
-import com.example.model.ChecklistStyleConfig
 import com.example.model.FloatingBadgeItem
-import com.example.model.QuickRequest
 import com.example.model.RepeatMode
 import com.example.model.SmartIconSettings
 import com.example.model.SmartTask
@@ -55,36 +51,15 @@ private data class LocalTaskDto(
 )
 
 @Serializable
-private data class LocalRequestDto(
-    val id: String,
-    val title: String,
-    val body: String = "",
-    val docType: String = "invoice",
-    val customerName: String = "",
-    val amountText: String = "",
-    val stampId: String = "none",
-    val isSigned: Boolean = false,
-    val signatureName: String = "",
-    val statusDot: String = "none",
-    val statusLabel: String = "",
-    val splitMode: String = "full",
-    val isChecklistOrder: Boolean = false,
-    val createdAtMs: Long = 0L
-)
-
-@Serializable
 private data class LocalWorkspaceState(
     val initialized: Boolean = false,
     val preferences: BackupPreferencesDto = BackupPreferencesDto(),
     val lastBackupLabel: String = "",
     val bannerImg: String = "default",
     val tasks: List<LocalTaskDto> = emptyList(),
-    val requests: List<LocalRequestDto> = emptyList(),
     val floatingBadgesInitialized: Boolean = false,
     val floatingBadges: List<FloatingBadgeItem> = emptyList(),
-    val smartIconSettings: SmartIconSettings = SmartIconSettings(),
-    val checklistOrders: List<ChecklistOrderItem> = emptyList(),
-    val checklistStyle: ChecklistStyleConfig = ChecklistStyleConfig()
+    val smartIconSettings: SmartIconSettings = SmartIconSettings()
 )
 
 class LocalStoreRepository(private val context: Context) {
@@ -208,29 +183,6 @@ class LocalStoreRepository(private val context: Context) {
             }
     }
 
-    val requestsFlow: Flow<List<QuickRequest>> = stateFlow.map { state ->
-        state.requests
-            .sortedByDescending { it.createdAtMs }
-            .map {
-                QuickRequest(
-                    id = it.id,
-                    userId = "local",
-                    title = it.title,
-                    body = it.body,
-                    docType = it.docType,
-                    customerName = it.customerName,
-                    amountText = it.amountText,
-                    stampId = it.stampId,
-                    isSigned = it.isSigned,
-                    signatureName = it.signatureName,
-                    statusDot = it.statusDot,
-                    statusLabel = it.statusLabel,
-                    splitMode = it.splitMode,
-                    isChecklistOrder = it.isChecklistOrder
-                )
-            }
-    }
-
     val floatingBadgesFlow: Flow<List<FloatingBadgeItem>> = stateFlow.map { state ->
         state.floatingBadges
     }
@@ -239,23 +191,11 @@ class LocalStoreRepository(private val context: Context) {
         state.smartIconSettings
     }
 
-    val checklistOrdersFlow: Flow<List<ChecklistOrderItem>> = stateFlow.map { state ->
-        state.checklistOrders.sortedBy { it.sortOrder }
-    }
-
-    val checklistStyleFlow: Flow<ChecklistStyleConfig> = stateFlow.map { state ->
-        state.checklistStyle
-    }
-
     suspend fun getTasksSnapshot(): List<SmartTask> = tasksFlow.first()
 
     suspend fun getPreferencesSnapshot(): UserPreferences = preferencesFlow.first()
 
     suspend fun getFloatingBadgesSnapshot(): List<FloatingBadgeItem> = floatingBadgesFlow.first()
-
-    suspend fun getChecklistOrdersSnapshot(): List<ChecklistOrderItem> = checklistOrdersFlow.first()
-
-    suspend fun getChecklistStyleSnapshot(): ChecklistStyleConfig = checklistStyleFlow.first()
 
     suspend fun ensureInitialized(): Result<Unit> = runWorkspaceEdit { state ->
         val defaultBadge = FloatingBadgeItem(
@@ -458,8 +398,8 @@ class LocalStoreRepository(private val context: Context) {
                 sortOrder = task.sortOrder,
                 badgeIconId = task.badgeIconId.take(64),
                 badgeVisible = task.badgeVisible,
-                badgeOffsetX = task.badgeOffsetX.coerceIn(-260f, 260f),
-                badgeOffsetY = task.badgeOffsetY.coerceIn(-260f, 260f),
+                badgeOffsetX = task.badgeOffsetX.coerceIn(-1200f, 1200f),
+                badgeOffsetY = task.badgeOffsetY.coerceIn(-1200f, 1200f),
                 badgeSizeDp = task.badgeSizeDp.coerceIn(20f, 96f),
                 badgeCategory = task.badgeCategory.ifBlank { "auto" }.take(24),
                 badgeSmartMode = task.badgeSmartMode.ifBlank { "manual" }.take(24),
@@ -490,8 +430,8 @@ class LocalStoreRepository(private val context: Context) {
                     ringId = task.ringId.take(100),
                     badgeIconId = task.badgeIconId.take(64),
                     badgeVisible = task.badgeVisible,
-                    badgeOffsetX = task.badgeOffsetX.coerceIn(-260f, 260f),
-                    badgeOffsetY = task.badgeOffsetY.coerceIn(-260f, 260f),
+                    badgeOffsetX = task.badgeOffsetX.coerceIn(-1200f, 1200f),
+                    badgeOffsetY = task.badgeOffsetY.coerceIn(-1200f, 1200f),
                     badgeSizeDp = task.badgeSizeDp.coerceIn(20f, 96f),
                     badgeCategory = task.badgeCategory.ifBlank { "auto" }.take(24),
                     badgeSmartMode = task.badgeSmartMode.ifBlank { "manual" }.take(24),
@@ -518,8 +458,8 @@ class LocalStoreRepository(private val context: Context) {
                 existing.copy(
                     badgeIconId = iconId?.take(64) ?: existing.badgeIconId,
                     badgeVisible = visible ?: existing.badgeVisible,
-                    badgeOffsetX = (offsetX ?: existing.badgeOffsetX).coerceIn(-260f, 260f),
-                    badgeOffsetY = (offsetY ?: existing.badgeOffsetY).coerceIn(-260f, 260f),
+                    badgeOffsetX = (offsetX ?: existing.badgeOffsetX).coerceIn(-1200f, 1200f),
+                    badgeOffsetY = (offsetY ?: existing.badgeOffsetY).coerceIn(-1200f, 1200f),
                     badgeSizeDp = (sizeDp ?: existing.badgeSizeDp).coerceIn(20f, 96f),
                     badgeCategory = category?.ifBlank { "auto" }?.take(24) ?: existing.badgeCategory,
                     badgeSmartMode = smartMode?.ifBlank { "manual" }?.take(24) ?: existing.badgeSmartMode,
@@ -542,8 +482,8 @@ class LocalStoreRepository(private val context: Context) {
             existing.copy(
                 badgeIconId = iconId.take(64),
                 badgeVisible = visible,
-                badgeOffsetX = offsetX.coerceIn(-260f, 260f),
-                badgeOffsetY = offsetY.coerceIn(-260f, 260f),
+                badgeOffsetX = offsetX.coerceIn(-1200f, 1200f),
+                badgeOffsetY = offsetY.coerceIn(-1200f, 1200f),
                 badgeSizeDp = sizeDp.coerceIn(20f, 96f),
                 badgeSmartMode = smartMode?.ifBlank { "manual" }?.take(24) ?: existing.badgeSmartMode
             )
@@ -589,75 +529,6 @@ class LocalStoreRepository(private val context: Context) {
 
     suspend fun deleteTask(taskId: String): Result<Unit> = runWorkspaceEdit { state ->
         state.copy(tasks = state.tasks.filterNot { it.id == taskId })
-    }
-
-    suspend fun createRequest(request: QuickRequest): Result<Unit> = runWorkspaceEdit { state ->
-        val cleanTitle = request.title.trim().take(200)
-        require(cleanTitle.isNotEmpty()) { "Request title must not be empty" }
-        val dto = LocalRequestDto(
-            id = UUID.randomUUID().toString(),
-            title = cleanTitle,
-            body = request.body.trim().take(4000),
-            docType = request.docType.take(20),
-            customerName = request.customerName.trim().take(120),
-            amountText = request.amountText.trim().take(80),
-            stampId = request.stampId.take(20),
-            isSigned = request.isSigned,
-            signatureName = request.signatureName.trim().take(80),
-            statusDot = request.statusDot.take(20),
-            statusLabel = request.statusLabel.trim().take(80),
-            splitMode = request.splitMode.take(20),
-            isChecklistOrder = request.isChecklistOrder,
-            createdAtMs = System.currentTimeMillis()
-        )
-        state.copy(initialized = true, requests = listOf(dto) + state.requests)
-    }
-
-    suspend fun updateRequest(
-        requestId: String,
-        transform: (QuickRequest) -> QuickRequest
-    ): Result<Unit> = runWorkspaceEdit { state ->
-        val updated = state.requests.map { existing ->
-            if (existing.id == requestId) {
-                val mapped = transform(
-                    QuickRequest(
-                        id = existing.id,
-                        userId = "local",
-                        title = existing.title,
-                        body = existing.body,
-                        docType = existing.docType,
-                        customerName = existing.customerName,
-                        amountText = existing.amountText,
-                        stampId = existing.stampId,
-                        isSigned = existing.isSigned,
-                        signatureName = existing.signatureName,
-                        statusDot = existing.statusDot,
-                        statusLabel = existing.statusLabel,
-                        splitMode = existing.splitMode,
-                        isChecklistOrder = existing.isChecklistOrder
-                    )
-                )
-                existing.copy(
-                    title = mapped.title.trim().take(200).ifEmpty { existing.title },
-                    body = mapped.body.trim().take(4000),
-                    docType = mapped.docType.take(20),
-                    customerName = mapped.customerName.trim().take(120),
-                    amountText = mapped.amountText.trim().take(80),
-                    stampId = mapped.stampId.take(20),
-                    isSigned = mapped.isSigned,
-                    signatureName = mapped.signatureName.trim().take(80),
-                    statusDot = mapped.statusDot.take(20),
-                    statusLabel = mapped.statusLabel.trim().take(80),
-                    splitMode = mapped.splitMode.take(20),
-                    isChecklistOrder = mapped.isChecklistOrder
-                )
-            } else existing
-        }
-        state.copy(requests = updated)
-    }
-
-    suspend fun deleteRequest(requestId: String): Result<Unit> = runWorkspaceEdit { state ->
-        state.copy(requests = state.requests.filterNot { it.id == requestId })
     }
 
     suspend fun addFloatingBadge(
@@ -754,26 +625,6 @@ class LocalStoreRepository(private val context: Context) {
         )
     }
 
-    suspend fun saveChecklistOrders(items: List<ChecklistOrderItem>): Result<Unit> = runWorkspaceEdit { state ->
-        val normalized = items.mapIndexed { idx, item ->
-            item.copy(
-                text = item.text.trim().take(500),
-                status = if (item.status in setOf(ChecklistOrderItem.STATUS_CHECK, ChecklistOrderItem.STATUS_X)) item.status else ChecklistOrderItem.STATUS_NONE,
-                sortOrder = idx.toLong()
-            )
-        }.filter { it.text.isNotEmpty() }
-        state.copy(initialized = true, checklistOrders = normalized)
-    }
-
-    suspend fun saveChecklistStyle(style: ChecklistStyleConfig): Result<Unit> = runWorkspaceEdit { state ->
-        val normalized = style.copy(
-            circleSizeDp = style.circleSizeDp.coerceIn(22, 52),
-            markSizeDp = style.markSizeDp.coerceIn(10, 34),
-            itemSpacingDp = style.itemSpacingDp.coerceIn(4, 22)
-        )
-        state.copy(initialized = true, checklistStyle = normalized)
-    }
-
     suspend fun restoreFromSnapshot(snapshot: BackupSnapshotPayload): Result<Unit> = runWorkspaceEdit { state ->
         val p = snapshot.preferences
         val normalizedPrefs = p.copy(
@@ -816,38 +667,18 @@ class LocalStoreRepository(private val context: Context) {
                 sortOrder = if (t.sortOrder > 0L) t.sortOrder else (System.currentTimeMillis() - idx),
                 badgeIconId = t.badgeIconId.take(64),
                 badgeVisible = t.badgeVisible,
-                badgeOffsetX = t.badgeOffsetX.coerceIn(-260f, 260f),
-                badgeOffsetY = t.badgeOffsetY.coerceIn(-260f, 260f),
+                badgeOffsetX = t.badgeOffsetX.coerceIn(-1200f, 1200f),
+                badgeOffsetY = t.badgeOffsetY.coerceIn(-1200f, 1200f),
                 badgeSizeDp = t.badgeSizeDp.coerceIn(20f, 96f),
                 badgeCategory = t.badgeCategory.ifBlank { "auto" }.take(24),
                 badgeSmartMode = t.badgeSmartMode.ifBlank { "manual" }.take(24),
                 badgeLocked = t.badgeLocked
             )
         }
-        val baseTime = System.currentTimeMillis()
-        val restoredReqs = snapshot.requests.mapIndexed { idx, r: BackupRequestDto ->
-            LocalRequestDto(
-                id = UUID.randomUUID().toString(),
-                title = r.title.trim().take(200).ifEmpty { "Request" },
-                body = r.body.take(4000),
-                docType = r.docType.ifBlank { "invoice" },
-                customerName = r.customerName.take(120),
-                amountText = r.amountText.take(80),
-                stampId = r.stampId.ifBlank { "none" },
-                isSigned = r.isSigned,
-                signatureName = r.signatureName.take(80),
-                statusDot = r.statusDot.ifBlank { "none" },
-                statusLabel = r.statusLabel.take(80),
-                splitMode = r.splitMode.ifBlank { "full" },
-                isChecklistOrder = r.isChecklistOrder,
-                createdAtMs = baseTime - idx
-            )
-        }
         state.copy(
             initialized = true,
             preferences = normalizedPrefs,
             tasks = restoredTasks,
-            requests = restoredReqs,
             floatingBadgesInitialized = true,
             floatingBadges = if (snapshot.floatingBadges.isNotEmpty()) {
                 snapshot.floatingBadges.map { b ->
@@ -860,9 +691,7 @@ class LocalStoreRepository(private val context: Context) {
             } else {
                 state.floatingBadges
             },
-            smartIconSettings = snapshot.smartIconSettings,
-            checklistOrders = snapshot.checklistOrders,
-            checklistStyle = snapshot.checklistStyle
+            smartIconSettings = snapshot.smartIconSettings
         )
     }
 

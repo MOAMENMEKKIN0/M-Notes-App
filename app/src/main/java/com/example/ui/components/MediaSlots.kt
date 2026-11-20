@@ -161,8 +161,10 @@ private fun builtInDrawableForName(name: String): Int? = when (name) {
     "img_pixar_chars_fitness_1" -> R.drawable.img_pixar_chars_fitness_1_1795106627995
     "img_pixar_chars_vibes_1" -> R.drawable.img_pixar_chars_vibes_1_1795106627639
     "img_pixar_chars_poses_1" -> R.drawable.img_pixar_chars_poses_1_1795106628868
-    // Pixar 3D Glossy Checkmark & X Medallions Pack
-    "img_pixar_check_x_pack" -> R.drawable.img_pixar_check_x_pack_1795106627433
+    // New Bald Male & Athletic Male Pixar 3D Workouts, Cardio & Expression Packs (27 new tiles)
+    "img_bald_male_workouts_1" -> R.drawable.bald_male_workouts_1_1795213695364
+    "img_bald_male_workouts_2" -> R.drawable.bald_male_workouts_2_1795213694875
+    "img_bald_male_expressions" -> R.drawable.bald_male_expressions_1795213694392
     else -> null
 }
 
@@ -170,7 +172,9 @@ private fun builtInDrawableForName(name: String): Int? = when (name) {
 private fun bottomCaptionTrimFraction(resId: Int): Float = when (resId) {
     R.drawable.img_3d_chest_pack_1795101792319,
     R.drawable.img_3d_legs_pack_1795101792103 -> 0.13f
-    R.drawable.img_pixar_check_x_pack_1795106627433 -> 0.02f
+    R.drawable.bald_male_workouts_1_1795213695364,
+    R.drawable.bald_male_workouts_2_1795213694875,
+    R.drawable.bald_male_expressions_1795213694392 -> 0.02f
     else -> 0.04f
 }
 

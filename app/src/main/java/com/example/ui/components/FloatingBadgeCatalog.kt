@@ -132,11 +132,12 @@ object FloatingBadgeCatalog {
 
     val categories: List<FloatingBadgeCategory> = listOf(
         FloatingBadgeCategory("all", "الكل", "All"),
+        FloatingBadgeCategory("bald_expressions", "تعبيرات أصلع 3D", "Bald Expressions"),
         FloatingBadgeCategory("pixar_chars", "شخصيات 3D", "3D Guys"),
+        FloatingBadgeCategory("gym", "الجيم والتمارين", "Gym"),
         FloatingBadgeCategory("character", "الشخصية الأصلية", "Original"),
         FloatingBadgeCategory("sleep", "النوم والراحة", "Sleep"),
         FloatingBadgeCategory("active", "النشاط", "Active"),
-        FloatingBadgeCategory("gym", "الجيم", "Gym"),
         FloatingBadgeCategory("walk", "المشي والحركة", "Movement"),
         FloatingBadgeCategory("food", "الطعام", "Food"),
         FloatingBadgeCategory("coffee", "القهوة والمشروبات", "Drinks"),
@@ -157,6 +158,118 @@ object FloatingBadgeCatalog {
     private val iceTop = Color(0xFFEEF9FC); private val iceBot = Color(0xFFC5EAF5)
 
     val icons: List<FloatingBadgeIconSpec> = listOf(
+        // ==================== 0. BALD MALE PIXAR 3D EXPRESSIONS (9) ====================
+        FloatingBadgeIconSpec(
+            id = "bald_expr_laugh", categoryId = "bald_expressions",
+            nameAr = "أصلع • ضحكة كبيرة", nameEn = "Bald • Big Laugh",
+            gridTileUri = "res://img_bald_male_expressions#0",
+            accentTint = Color(0xFFEC4899), popEffect = BadgePopEffect.NONE
+        ),
+        FloatingBadgeIconSpec(
+            id = "bald_expr_determined", categoryId = "bald_expressions",
+            nameAr = "أصلع • تركيز وحماس", nameEn = "Bald • Determined",
+            gridTileUri = "res://img_bald_male_expressions#1",
+            accentTint = Color(0xFF14B8A6), popEffect = BadgePopEffect.NONE
+        ),
+        FloatingBadgeIconSpec(
+            id = "bald_expr_surprised", categoryId = "bald_expressions",
+            nameAr = "أصلع • مندهش ومصدوم", nameEn = "Bald • Surprised",
+            gridTileUri = "res://img_bald_male_expressions#2",
+            accentTint = Color(0xFFF59E0B), popEffect = BadgePopEffect.NONE
+        ),
+        FloatingBadgeIconSpec(
+            id = "bald_expr_wink", categoryId = "bald_expressions",
+            nameAr = "أصلع • غمزة واثقة", nameEn = "Bald • Playful Wink",
+            gridTileUri = "res://img_bald_male_expressions#3",
+            accentTint = Color(0xFF10B981), popEffect = BadgePopEffect.NONE
+        ),
+        FloatingBadgeIconSpec(
+            id = "bald_expr_yawn", categoryId = "bald_expressions",
+            nameAr = "أصلع • نعسان يتثاءب", nameEn = "Bald • Sleepy Yawn",
+            gridTileUri = "res://img_bald_male_expressions#4",
+            accentTint = Color(0xFF8B5CF6), popEffect = BadgePopEffect.ZZZ_POP
+        ),
+        FloatingBadgeIconSpec(
+            id = "bald_expr_grumpy", categoryId = "bald_expressions",
+            nameAr = "أصلع • غاضب ومكشّر", nameEn = "Bald • Grumpy Frown",
+            gridTileUri = "res://img_bald_male_expressions#5",
+            accentTint = Color(0xFFF97316), popEffect = BadgePopEffect.NONE
+        ),
+        FloatingBadgeIconSpec(
+            id = "bald_expr_shy", categoryId = "bald_expressions",
+            nameAr = "أصلع • خجول ولطيف", nameEn = "Bald • Shy Blush",
+            gridTileUri = "res://img_bald_male_expressions#6",
+            accentTint = Color(0xFF38BDF8), popEffect = BadgePopEffect.NONE
+        ),
+        FloatingBadgeIconSpec(
+            id = "bald_expr_cool", categoryId = "bald_expressions",
+            nameAr = "أصلع • كول بنظارة", nameEn = "Bald • Cool Shades",
+            gridTileUri = "res://img_bald_male_expressions#7",
+            accentTint = Color(0xFFEF4444), popEffect = BadgePopEffect.SPARKLE_POP
+        ),
+        FloatingBadgeIconSpec(
+            id = "bald_expr_zen", categoryId = "bald_expressions",
+            nameAr = "أصلع • هدوء واسترخاء", nameEn = "Bald • Calm Zen",
+            gridTileUri = "res://img_bald_male_expressions#8",
+            accentTint = Color(0xFF8B5CF6), popEffect = BadgePopEffect.NONE
+        ),
+
+        // ==================== 0B. BALD MALE GYM & CARDIO 3D MINI ICONS (9) ====================
+        FloatingBadgeIconSpec(
+            id = "bald_gym_bench", categoryId = "gym",
+            nameAr = "أصلع • بنش برس", nameEn = "Bald • Bench Press",
+            gridTileUri = "res://img_bald_male_workouts_1#0",
+            accentTint = Color(0xFF10B981), popEffect = BadgePopEffect.NONE
+        ),
+        FloatingBadgeIconSpec(
+            id = "bald_gym_squat", categoryId = "gym",
+            nameAr = "أصلع • سكوات رجل", nameEn = "Bald • Barbell Squat",
+            gridTileUri = "res://img_bald_male_workouts_1#1",
+            accentTint = Color(0xFF0EA5E9), popEffect = BadgePopEffect.NONE
+        ),
+        FloatingBadgeIconSpec(
+            id = "bald_gym_deadlift", categoryId = "gym",
+            nameAr = "أصلع • ديدليفت", nameEn = "Bald • Deadlift",
+            gridTileUri = "res://img_bald_male_workouts_1#2",
+            accentTint = Color(0xFFF59E0B), popEffect = BadgePopEffect.NONE
+        ),
+        FloatingBadgeIconSpec(
+            id = "bald_gym_pullups", categoryId = "gym",
+            nameAr = "أصلع • عقلة ظهر", nameEn = "Bald • Pull-Ups",
+            gridTileUri = "res://img_bald_male_workouts_1#3",
+            accentTint = Color(0xFF2563EB), popEffect = BadgePopEffect.NONE
+        ),
+        FloatingBadgeIconSpec(
+            id = "bald_gym_curls", categoryId = "gym",
+            nameAr = "أصلع • دمبل ذراع", nameEn = "Bald • Bicep Curls",
+            gridTileUri = "res://img_bald_male_workouts_1#4",
+            accentTint = Color(0xFF14B8A6), popEffect = BadgePopEffect.NONE
+        ),
+        FloatingBadgeIconSpec(
+            id = "bald_gym_treadmill", categoryId = "gym",
+            nameAr = "أصلع • جري مشاية", nameEn = "Bald • Treadmill Run",
+            gridTileUri = "res://img_bald_male_workouts_2#0",
+            accentTint = Color(0xFF06B6D4), popEffect = BadgePopEffect.NONE
+        ),
+        FloatingBadgeIconSpec(
+            id = "bald_gym_boxing", categoryId = "gym",
+            nameAr = "أصلع • ملاكمة", nameEn = "Bald • Boxing Bag",
+            gridTileUri = "res://img_bald_male_workouts_2#2",
+            accentTint = Color(0xFFEF4444), popEffect = BadgePopEffect.NONE
+        ),
+        FloatingBadgeIconSpec(
+            id = "bald_gym_ropes", categoryId = "gym",
+            nameAr = "أصلع • حبال القوة", nameEn = "Bald • Battle Ropes",
+            gridTileUri = "res://img_bald_male_workouts_2#4",
+            accentTint = Color(0xFF0EA5E9), popEffect = BadgePopEffect.NONE
+        ),
+        FloatingBadgeIconSpec(
+            id = "bald_gym_protein", categoryId = "gym",
+            nameAr = "أصلع • بروتين شيك", nameEn = "Bald • Protein Shake",
+            gridTileUri = "res://img_bald_male_workouts_2#7",
+            accentTint = Color(0xFF10B981), popEffect = BadgePopEffect.NONE
+        ),
+
         // ==================== 1. CHARACTER & STATES (12) ====================
         FloatingBadgeIconSpec(
             id = "sleeping", categoryId = "character",

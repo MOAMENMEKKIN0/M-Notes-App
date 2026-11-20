@@ -384,9 +384,7 @@ data class BackupSnapshotPayload(
     val tasks: List<BackupTaskDto> = emptyList(),
     val requests: List<BackupRequestDto> = emptyList(),
     val floatingBadges: List<FloatingBadgeItem> = emptyList(),
-    val smartIconSettings: SmartIconSettings = SmartIconSettings(),
-    val checklistOrders: List<ChecklistOrderItem> = emptyList(),
-    val checklistStyle: ChecklistStyleConfig = ChecklistStyleConfig()
+    val smartIconSettings: SmartIconSettings = SmartIconSettings()
 )
 
 data class AppThemeSpec(
@@ -586,7 +584,29 @@ object MNotesCatalog {
     )
 
     val pixel3dPhotos = listOf(
-        // === CHEST EXERCISES (New Pixar 3D Pack + Preserved Classics) ===
+        // === NEW BALD MALE & MALE PIXAR 3D STRENGTH WORKOUTS (Priority Collection) ===
+        BuiltInPhotoSpec("res://img_bald_male_workouts_1#0", "أصلع • بنش برس بالبار", "Bald • Barbell Bench Press", "chest", setOf("gym")),
+        BuiltInPhotoSpec("res://img_bald_male_workouts_1#1", "أصلع • سكوات خلفي بالبار", "Bald • Barbell Squat", "legs", setOf("gym")),
+        BuiltInPhotoSpec("res://img_bald_male_workouts_1#2", "أصلع • الرفعة الميتة ديدليفت", "Bald • Barbell Deadlift", "back", setOf("legs", "gym")),
+        BuiltInPhotoSpec("res://img_bald_male_workouts_1#3", "أصلع • عقلة كاملة للظهر", "Bald • Pull-Ups", "back", setOf("gym")),
+        BuiltInPhotoSpec("res://img_bald_male_workouts_1#4", "أصلع • بايسبس بالدمبل", "Bald • Dumbbell Curls", "shoulders_arms", setOf("gym")),
+        BuiltInPhotoSpec("res://img_bald_male_workouts_1#5", "أصلع • ضغط أكتاف بالدمبل", "Bald • Dumbbell Shoulder Press", "shoulders_arms", setOf("gym")),
+        BuiltInPhotoSpec("res://img_bald_male_workouts_1#6", "أصلع • سحب عالي للظهر", "Bald • Cable Lat Pulldown", "back", setOf("gym")),
+        BuiltInPhotoSpec("res://img_bald_male_workouts_1#7", "أصلع • أرجحة الكيتل بل", "Bald • Kettlebell Swing", "legs", setOf("cardio", "gym")),
+        BuiltInPhotoSpec("res://img_bald_male_workouts_1#8", "أصلع • تمرين البلانك للبطن", "Bald • Forearm Plank", "abs", setOf("gym")),
+
+        // === NEW BALD MALE & MALE PIXAR 3D CARDIO, BOXING & FITNESS (Priority Collection) ===
+        BuiltInPhotoSpec("res://img_bald_male_workouts_2#0", "أصلع • سبرنت على المشاية", "Bald • Treadmill Sprint", "cardio", setOf("gym")),
+        BuiltInPhotoSpec("res://img_bald_male_workouts_2#1", "أصلع • دراجة الكارديو", "Bald • Indoor Spin Bike", "cardio", setOf("legs", "gym")),
+        BuiltInPhotoSpec("res://img_bald_male_workouts_2#2", "أصلع • ملاكمة كيس ثقيل", "Bald • Heavy Bag Boxing", "cardio", setOf("shoulders_arms", "gym")),
+        BuiltInPhotoSpec("res://img_bald_male_workouts_2#3", "أصلع • نط الحبل كارديو", "Bald • Jump Rope Cardio", "cardio", setOf("gym")),
+        BuiltInPhotoSpec("res://img_bald_male_workouts_2#4", "أصلع • حبال القوة HIIT", "Bald • Battle Ropes HIIT", "cardio", setOf("shoulders_arms", "gym")),
+        BuiltInPhotoSpec("res://img_bald_male_workouts_2#5", "أصلع • جهاز التجديف", "Bald • Rowing Machine", "cardio", setOf("back", "gym")),
+        BuiltInPhotoSpec("res://img_bald_male_workouts_2#6", "أصلع • استشفاء فوم رولر", "Bald • Foam Roller Recovery", "recovery", setOf("gym")),
+        BuiltInPhotoSpec("res://img_bald_male_workouts_2#7", "أصلع • شيك بروتين صحي", "Bald • Protein Shake", "recovery", setOf("gym", "heritage")),
+        BuiltInPhotoSpec("res://img_bald_male_workouts_2#8", "أصلع • جري خارجي بسماعات", "Bald • Outdoor Jogging", "cardio", setOf("recovery")),
+
+        // === CHEST EXERCISES (Pixar 3D Pack) ===
         BuiltInPhotoSpec("res://img_3d_chest_pack#0", "بنش برس مسطح بالبار", "Flat Barbell Bench Press", "chest", setOf("gym")),
         BuiltInPhotoSpec("res://img_3d_chest_pack#1", "صدر عالي بالدمبل", "Incline Dumbbell Press", "chest", setOf("gym")),
         BuiltInPhotoSpec("res://img_3d_chest_pack#2", "جهاز ضغط صدر سفلي", "Decline Chest Machine", "chest", setOf("gym")),
@@ -712,19 +732,25 @@ object MNotesCatalog {
         BuiltInPhotoSpec("res://img_medieval_veggies#7", "فجل أحمر في فخار", "Terracotta Radishes", "vegetables"),
         BuiltInPhotoSpec("res://img_medieval_veggies#8", "زيتون في إناء قديم", "Ancient Olives", "vegetables"),
 
-        // Heritage & 3D Characters
-        BuiltInPhotoSpec("res://img_3d_elder_beige", "رجل كبير - بيج", "Elder - Beige", "heritage"),
-        BuiltInPhotoSpec("res://img_3d_elder_man", "رجل كبير - فاتح", "Elder - Light", "heritage"),
-        BuiltInPhotoSpec("res://img_3d_bald_brown", "شاب أقرع - بني", "Bald - Brown", "heritage"),
-        BuiltInPhotoSpec("res://img_3d_bald_man", "شاب أقرع - فاتح", "Bald - Light", "heritage"),
+        // Heritage & 3D Characters (Bald Male & Male Characters Prioritized)
+        BuiltInPhotoSpec("res://img_bald_male_expressions#0", "أصلع 3D • ضحكة كبيرة", "Bald 3D • Big Laugh", "heritage"),
+        BuiltInPhotoSpec("res://img_bald_male_expressions#1", "أصلع بلحية • تركيز وحماس", "Bald Beard • Determined", "heritage"),
+        BuiltInPhotoSpec("res://img_bald_male_expressions#2", "أصلع 3D • مندهش ومصدوم", "Bald 3D • Surprised", "heritage"),
+        BuiltInPhotoSpec("res://img_bald_male_expressions#3", "أصلع بلحية • غمزة واثقة", "Bald Beard • Confident Wink", "heritage"),
+        BuiltInPhotoSpec("res://img_bald_male_expressions#4", "أصلع 3D • نعسان ويتثاءب", "Bald 3D • Sleepy Yawn", "heritage"),
+        BuiltInPhotoSpec("res://img_bald_male_expressions#5", "أصلع بلحية • غاضب ومكشّر", "Bald Beard • Grumpy", "heritage"),
+        BuiltInPhotoSpec("res://img_bald_male_expressions#6", "أصلع 3D • خجول ولطيف", "Bald 3D • Shy Blush", "heritage"),
+        BuiltInPhotoSpec("res://img_bald_male_expressions#7", "أصلع بنظارة شمس • كول", "Bald Shades • Cool Smirk", "heritage"),
+        BuiltInPhotoSpec("res://img_bald_male_expressions#8", "أصلع 3D • هدوء واسترخاء", "Bald 3D • Peaceful Zen", "heritage"),
+        BuiltInPhotoSpec("res://img_3d_bald_brown", "شاب أصلع - بني", "Bald Man - Brown", "heritage"),
+        BuiltInPhotoSpec("res://img_3d_bald_man", "شاب أصلع - فاتح", "Bald Man - Light", "heritage"),
         BuiltInPhotoSpec("res://img_3d_haired_mint", "شاب بشعر - نعناعي", "Man - Mint", "heritage"),
         BuiltInPhotoSpec("res://img_3d_haired_man", "شاب بشعر - فاتح", "Man - Light", "heritage"),
-        BuiltInPhotoSpec("res://img_3d_child_cream", "طفلة - كريمي", "Child - Cream", "heritage"),
-        BuiltInPhotoSpec("res://img_3d_child", "طفل - فاتح", "Child - Light", "heritage"),
-        BuiltInPhotoSpec("res://img_3d_woman_beige", "امرأة - بيج", "Woman - Beige", "heritage"),
-        BuiltInPhotoSpec("res://img_3d_woman", "امرأة - فاتح", "Woman - Light", "heritage"),
-        BuiltInPhotoSpec("res://img_3d_medieval_bald", "القرون الوسطى - أصلع", "Medieval Bald", "heritage"),
+        BuiltInPhotoSpec("res://img_3d_elder_beige", "رجل كبير - بيج", "Elder Man - Beige", "heritage"),
+        BuiltInPhotoSpec("res://img_3d_elder_man", "رجل كبير - فاتح", "Elder Man - Light", "heritage"),
+        BuiltInPhotoSpec("res://img_3d_medieval_bald", "القرون الوسطى - رجل أصلع", "Medieval Bald Man", "heritage"),
         BuiltInPhotoSpec("res://img_3d_jahiliyyah", "أيام الجاهلية - صحراء", "Ancient Arabian", "heritage"),
+        BuiltInPhotoSpec("res://img_3d_child", "طفل - فاتح", "Boy - Light", "heritage"),
         BuiltInPhotoSpec("res://img_3d_ancient_bread_grain", "خبز زمان وقمح وشعير", "Bread & Grains", "heritage")
     )
 
@@ -737,75 +763,75 @@ object MNotesCatalog {
     val launcherIcons = listOf(
         LauncherIconSpec(
             id = "I1", aliasClassName = "com.example.LauncherIcon1",
-            nameAr = "١ • مينت الأساسي", nameEn = "1 • Classic Mint",
-            bgStart = Color(0xFF18C28B), bgEnd = Color(0xFF0D9488),
-            fgDrawableRes = R.drawable.ic_mnotes_foreground_art, isBitmapArt = true
+            nameAr = "١ • أصلع القائمة (مينت)", nameEn = "1 • Checklist Mint",
+            bgStart = Color(0xFF5CE1B8), bgEnd = Color(0xFF1AB394),
+            fgDrawableRes = R.drawable.ic_samsung_pixar_1, isBitmapArt = true
         ),
         LauncherIconSpec(
             id = "I2", aliasClassName = "com.example.LauncherIcon2",
-            nameAr = "٢ • مدور بيج وتذكير", nameEn = "2 • Circle Beige",
-            bgStart = Color(0xFFF5EBDD), bgEnd = Color(0xFFEADBC8),
-            fgDrawableRes = R.drawable.ic_app_icon_2_fg
+            nameAr = "٢ • بطل الجيم (أزرق)", nameEn = "2 • Gym Flex Blue",
+            bgStart = Color(0xFF32A8F8), bgEnd = Color(0xFF1D74E8),
+            fgDrawableRes = R.drawable.ic_samsung_pixar_2, isBitmapArt = true
         ),
         LauncherIconSpec(
             id = "I3", aliasClassName = "com.example.LauncherIcon3",
-            nameAr = "٣ • عضوي مينت في أبيض", nameEn = "3 • Organic Mint-White",
-            bgStart = Color(0xFFFFFFFF), bgEnd = Color(0xFFF8FAFC),
-            fgDrawableRes = R.drawable.ic_app_icon_3_fg
+            nameAr = "٣ • جرس التذكير (ذهبي)", nameEn = "3 • Golden Bell",
+            bgStart = Color(0xFFF9B846), bgEnd = Color(0xFFE68A1E),
+            fgDrawableRes = R.drawable.ic_samsung_pixar_3, isBitmapArt = true
         ),
         LauncherIconSpec(
             id = "I4", aliasClassName = "com.example.LauncherIcon4",
-            nameAr = "٤ • مدور مينت وجرس", nameEn = "4 • Circle Mint Bell",
-            bgStart = Color(0xFF18C28B), bgEnd = Color(0xFF10B981),
-            fgDrawableRes = R.drawable.ic_app_icon_4_fg
+            nameAr = "٤ • عدّاء السرعة (نيلي)", nameEn = "4 • Sprint Runner",
+            bgStart = Color(0xFF5856D6), bgEnd = Color(0xFF3B38B2),
+            fgDrawableRes = R.drawable.ic_samsung_pixar_4, isBitmapArt = true
         ),
         LauncherIconSpec(
             id = "I5", aliasClassName = "com.example.LauncherIcon5",
-            nameAr = "٥ • عضوي لبني سماوي", nameEn = "5 • Organic Baby Blue",
-            bgStart = Color(0xFFEFF8FF), bgEnd = Color(0xFFD8EEFA),
-            fgDrawableRes = R.drawable.ic_app_icon_5_fg
+            nameAr = "٥ • قهوة الصباح (مرجاني)", nameEn = "5 • Morning Coffee",
+            bgStart = Color(0xFFF87D64), bgEnd = Color(0xFFE35A43),
+            fgDrawableRes = R.drawable.ic_samsung_pixar_5, isBitmapArt = true
         ),
         LauncherIconSpec(
             id = "I6", aliasClassName = "com.example.LauncherIcon6",
-            nameAr = "٦ • مدور أبيض وتذكير", nameEn = "6 • Circle White Check",
-            bgStart = Color(0xFFFFFFFF), bgEnd = Color(0xFFF1F5F9),
-            fgDrawableRes = R.drawable.ic_app_icon_6_fg
+            nameAr = "٦ • وسام الإنجاز (زمردي)", nameEn = "6 • Check Badge",
+            bgStart = Color(0xFF1AB394), bgEnd = Color(0xFF0E8C73),
+            fgDrawableRes = R.drawable.ic_samsung_pixar_6, isBitmapArt = true
         ),
         LauncherIconSpec(
             id = "I7", aliasClassName = "com.example.LauncherIcon7",
-            nameAr = "٧ • عضوي بيج دافئ", nameEn = "7 • Organic Sand Beige",
-            bgStart = Color(0xFFEADBC8), bgEnd = Color(0xFFDEC6A9),
-            fgDrawableRes = R.drawable.ic_app_icon_7_fg
+            nameAr = "٧ • سماعات ونجوم (لافندر)", nameEn = "7 • Music Star",
+            bgStart = Color(0xFFB69DF8), bgEnd = Color(0xFF8B6DE3),
+            fgDrawableRes = R.drawable.ic_samsung_pixar_7, isBitmapArt = true
         ),
         LauncherIconSpec(
             id = "I8", aliasClassName = "com.example.LauncherIcon8",
-            nameAr = "٨ • مينت في أبيض ناعم", nameEn = "8 • Soft Mint-Ice",
-            bgStart = Color(0xFFE6FBF3), bgEnd = Color(0xFFD1F7E8),
-            fgDrawableRes = R.drawable.ic_app_icon_8_fg
+            nameAr = "٨ • كأس البطولة (رمادي أزرق)", nameEn = "8 • Trophy Champ",
+            bgStart = Color(0xFF4B6D9B), bgEnd = Color(0xFF314D74),
+            fgDrawableRes = R.drawable.ic_samsung_pixar_8, isBitmapArt = true
         ),
         LauncherIconSpec(
             id = "I9", aliasClassName = "com.example.LauncherIcon9",
-            nameAr = "٩ • مدور لبني في أبيض", nameEn = "9 • Circle Blue-White",
-            bgStart = Color(0xFFFFFFFF), bgEnd = Color(0xFFF8FAFC),
-            fgDrawableRes = R.drawable.ic_app_icon_9_fg
+            nameAr = "٩ • نوم هادئ (كريمي)", nameEn = "9 • Moon Sleep",
+            bgStart = Color(0xFFF6D58E), bgEnd = Color(0xFFE5B454),
+            fgDrawableRes = R.drawable.ic_samsung_pixar_9, isBitmapArt = true
         ),
         LauncherIconSpec(
             id = "I10", aliasClassName = "com.example.LauncherIcon10",
-            nameAr = "١٠ • عضوي مينت جيم", nameEn = "10 • Organic Mint Gym",
-            bgStart = Color(0xFF10B981), bgEnd = Color(0xFF18C28B),
-            fgDrawableRes = R.drawable.ic_app_icon_10_fg
+            nameAr = "١٠ • تقويم ذكي (كحلي)", nameEn = "10 • Smart Planner",
+            bgStart = Color(0xFF123C7B), bgEnd = Color(0xFF0B2552),
+            fgDrawableRes = R.drawable.ic_samsung_pixar_10, isBitmapArt = true
         ),
         LauncherIconSpec(
             id = "I11", aliasClassName = "com.example.LauncherIcon11",
-            nameAr = "١١ • مدور بيج وساعة", nameEn = "11 • Circle Beige Clock",
-            bgStart = Color(0xFFFFFDF9), bgEnd = Color(0xFFF5EBDD),
-            fgDrawableRes = R.drawable.ic_app_icon_11_fg
+            nameAr = "١١ • صحة ونبض (أكوا)", nameEn = "11 • Vitality Heart",
+            bgStart = Color(0xFF4DD9B6), bgEnd = Color(0xFF16A085),
+            fgDrawableRes = R.drawable.ic_samsung_pixar_11, isBitmapArt = true
         ),
         LauncherIconSpec(
             id = "I12", aliasClassName = "com.example.LauncherIcon12",
-            nameAr = "١٢ • عضوي لبني ومينت", nameEn = "12 • Organic Mint-Sky",
-            bgStart = Color(0xFFE0F2FE), bgEnd = Color(0xFFE6FBF3),
-            fgDrawableRes = R.drawable.ic_app_icon_12_fg
+            nameAr = "١٢ • ملاكم الطاقة (برتقالي)", nameEn = "12 • Boxing Energy",
+            bgStart = Color(0xFFF26D4B), bgEnd = Color(0xFFD94A2A),
+            fgDrawableRes = R.drawable.ic_samsung_pixar_12, isBitmapArt = true
         )
     )
 

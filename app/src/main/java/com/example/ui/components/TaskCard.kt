@@ -120,6 +120,9 @@ fun TaskCircleWithFloatingBadge(
     val latestOnBadgeDrag by rememberUpdatedState(onBadgeDrag)
     val latestOnDraggingChanged by rememberUpdatedState(onDraggingChanged)
 
+    var isBadgeSelected by remember(task.id) { mutableStateOf(false) }
+    val colors = LocalMNotesColors.current
+
     Box(contentAlignment = Alignment.Center) {
         MediaAvatarSlot(
             imgUri = task.imgUri,
@@ -136,7 +139,7 @@ fun TaskCircleWithFloatingBadge(
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
-                    .zIndex(if (isDragging) 95f else 15f)
+                    .zIndex(if (isDragging) 95f else if (isBadgeSelected) 40f else 20f)
                     .graphicsLayer {
                         // GPU-only render-layer translation: ZERO recomposition, ZERO relayout,
                         // ZERO easing/spring lag — glued 1:1 to finger in real time.
@@ -147,14 +150,13 @@ fun TaskCircleWithFloatingBadge(
                     .pointerInput(task.id, task.badgeLocked, densityPx) {
                         val dragThresholdPx = 3.5.dp.toPx()
                         val dragThresholdSq = dragThresholdPx * dragThresholdPx
-                        val minPx = -260f * densityPx
-                        val maxPx = 260f * densityPx
+                        val minPx = -1200f * densityPx
+                        val maxPx = 1200f * densityPx
 
                         awaitEachGesture {
                             val down = awaitFirstDown(requireUnconsumed = false)
                             val pointerId = down.id
                             if (latestTask.badgeLocked) {
-                                // Locked: drag disabled, clean tap opens Icon Library
                                 var movedFar = false
                                 val tapSlopSq = (dragThresholdPx * 3f) * (dragThresholdPx * 3f)
                                 while (true) {
@@ -163,7 +165,7 @@ fun TaskCircleWithFloatingBadge(
                                     if (!change.pressed) {
                                         if (!movedFar) {
                                             change.consume()
-                                            latestOnBadgeTap(latestTask)
+                                            isBadgeSelected = !isBadgeSelected
                                         }
                                         break
                                     }
@@ -173,8 +175,6 @@ fun TaskCircleWithFloatingBadge(
                                     }
                                 }
                             } else {
-                                // Claim gesture immediately so parent LazyColumn / HorizontalPager
-                                // cannot steal touches or introduce drag resistance.
                                 down.consume()
                                 var totalDx = 0f
                                 var totalDy = 0f
@@ -194,8 +194,8 @@ fun TaskCircleWithFloatingBadge(
                                                 offsetYPx / densityPx
                                             )
                                         } else {
-                                            // Pure tap: open Icon Library directly
-                                            latestOnBadgeTap(latestTask)
+                                            // First tap selects; second tap on same icon immediately deselects
+                                            isBadgeSelected = !isBadgeSelected
                                         }
                                         break
                                     }
@@ -210,12 +210,10 @@ fun TaskCircleWithFloatingBadge(
                                                 dragging = true
                                                 isDragging = true
                                                 latestOnDraggingChanged(true)
-                                                // Apply full initial movement immediately (zero dead-zone lag)
                                                 offsetXPx = (offsetXPx + totalDx).coerceIn(minPx, maxPx)
                                                 offsetYPx = (offsetYPx + totalDy).coerceIn(minPx, maxPx)
                                             }
                                         } else {
-                                            // Direct 1:1 sub-pixel finger tracking
                                             offsetXPx = (offsetXPx + delta.x).coerceIn(minPx, maxPx)
                                             offsetYPx = (offsetYPx + delta.y).coerceIn(minPx, maxPx)
                                         }
@@ -226,11 +224,48 @@ fun TaskCircleWithFloatingBadge(
                     }
                     .testTag("task_circle_badge_${task.id}")
             ) {
-                FloatingBadgeVisual(
-                    iconId = resolvedIconId,
-                    sizeDp = task.badgeSizeDp.coerceIn(20f, 96f),
-                    contentDescription = "${task.title} icon"
-                )
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = if (isBadgeSelected) {
+                        Modifier
+                            .clip(CircleShape)
+                            .border(2.dp, colors.primary, CircleShape)
+                            .padding(2.dp)
+                    } else Modifier
+                ) {
+                    FloatingBadgeVisual(
+                        iconId = resolvedIconId,
+                        sizeDp = task.badgeSizeDp.coerceIn(20f, 96f),
+                        contentDescription = "${task.title} icon"
+                    )
+                }
+            }
+
+            if (isBadgeSelected && !isDragging) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .zIndex(50f)
+                        .graphicsLayer {
+                            translationX = offsetXPx
+                            translationY = offsetYPx - (task.badgeSizeDp.coerceIn(20f, 96f) * 0.55f + 18f) * densityPx
+                        }
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(colors.primary)
+                        .clickable {
+                            isBadgeSelected = false
+                            latestOnBadgeTap(latestTask)
+                        }
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                        .testTag("task_circle_badge_edit_${task.id}")
+                ) {
+                    Text(
+                        text = "✎",
+                        color = Color.White,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                }
             }
         }
     }

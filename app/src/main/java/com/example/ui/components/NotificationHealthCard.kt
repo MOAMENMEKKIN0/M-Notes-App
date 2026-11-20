@@ -32,6 +32,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -42,15 +43,25 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.notification.TaskAlarmScheduler
 import com.example.ui.theme.LocalMNotesColors
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+
+private tailrec fun android.content.Context.findLifecycleOwner(): LifecycleOwner? = when (this) {
+    is LifecycleOwner -> this
+    is android.content.ContextWrapper -> baseContext.findLifecycleOwner()
+    else -> null
+}
 
 /**
  * Interactive delivery-health & test panel for native background and lock-screen notifications.
@@ -64,18 +75,42 @@ fun BackgroundNotificationsHealthCard(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val hostLifecycleOwner = remember(context) { context.findLifecycleOwner() }
+    val windowInfo = LocalWindowInfo.current
     val colors = LocalMNotesColors.current
 
-    // Re-check live permission status whenever user returns from system Settings
+    // Re-check live permission & battery status on Activity resume, sheet lifecycle resume,
+    // window focus restoration (returning from OEM Settings overlay), and lightweight live tick.
     var refreshTick by remember { mutableIntStateOf(0) }
-    DisposableEffect(lifecycleOwner) {
+    DisposableEffect(lifecycleOwner, hostLifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
+            if (event == Lifecycle.Event.ON_RESUME || event == Lifecycle.Event.ON_START) {
                 refreshTick++
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        if (hostLifecycleOwner != null && hostLifecycleOwner !== lifecycleOwner) {
+            hostLifecycleOwner.lifecycle.addObserver(observer)
+        }
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            if (hostLifecycleOwner != null && hostLifecycleOwner !== lifecycleOwner) {
+                hostLifecycleOwner.lifecycle.removeObserver(observer)
+            }
+        }
+    }
+
+    LaunchedEffect(windowInfo.isWindowFocused) {
+        if (windowInfo.isWindowFocused) {
+            refreshTick++
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        while (isActive) {
+            delay(1200L)
+            refreshTick++
+        }
     }
 
     val notifPermLauncher = rememberLauncherForActivityResult(

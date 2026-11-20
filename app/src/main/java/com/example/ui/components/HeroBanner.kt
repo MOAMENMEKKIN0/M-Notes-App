@@ -144,7 +144,7 @@ fun HeroBanner(
                     .height((photoDp + 48.dp).coerceAtLeast(104.dp))
                     .shadow(3.dp, RoundedCornerShape(20.dp), clip = false)
                     .clip(RoundedCornerShape(20.dp))
-                    .then(if (photoClick != null) Modifier.clickable(onClick = photoClick) else Modifier)
+                    .then(if (!isDemo) Modifier.clickable(onClick = onBannerBodyClick) else Modifier)
             ) {
                 MNotesPhotoContent(
                     imgUri = prefs.bannerImg,

@@ -10,14 +10,10 @@ import com.example.data.LocalStoreRepository
 import com.example.data.MNotesRepository
 import com.example.localization.AppStrings
 import com.example.model.BackupPreferencesDto
-import com.example.model.BackupRequestDto
 import com.example.model.BackupSnapshotPayload
 import com.example.model.BackupTaskDto
-import com.example.model.ChecklistOrderItem
-import com.example.model.ChecklistStyleConfig
 import com.example.model.FloatingBadgeItem
 import com.example.model.LibraryPhoto
-import com.example.model.QuickRequest
 import com.example.model.RepeatMode
 import com.example.model.SmartIconSettings
 import com.example.model.SmartTask
@@ -95,18 +91,6 @@ class MNotesViewModel(
 
     private val inFlightTaskWrites = AtomicInteger(0)
 
-    val requestsState: StateFlow<UiState<List<QuickRequest>>> = localStore.requestsFlow
-        .map<List<QuickRequest>, UiState<List<QuickRequest>>> { UiState.Success(it) }
-        .catch { error ->
-            if (error is CancellationException) throw error
-            emit(UiState.Error(error.message ?: "Failed to load requests"))
-        }
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000L),
-            initialValue = UiState.Loading
-        )
-
     val libraryPhotos: StateFlow<List<LibraryPhoto>> = mediaRepository.photosFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
@@ -119,14 +103,7 @@ class MNotesViewModel(
     private val _smartIconSettings = MutableStateFlow(SmartIconSettings())
     val smartIconSettings: StateFlow<SmartIconSettings> = _smartIconSettings.asStateFlow()
 
-    private val _checklistOrders = MutableStateFlow<List<ChecklistOrderItem>>(emptyList())
-    val checklistOrders: StateFlow<List<ChecklistOrderItem>> = _checklistOrders.asStateFlow()
-
-    private val _checklistStyle = MutableStateFlow(ChecklistStyleConfig())
-    val checklistStyle: StateFlow<ChecklistStyleConfig> = _checklistStyle.asStateFlow()
-
     private val inFlightBadgeWrites = AtomicInteger(0)
-    private val inFlightChecklistWrites = AtomicInteger(0)
     private var autoBackupDebounceJob: Job? = null
     @Volatile
     private var lastSmartSettingsMutationAtMs: Long = 0L
@@ -183,18 +160,6 @@ class MNotesViewModel(
                 if (now - lastSmartSettingsMutationAtMs > 350L) {
                     _smartIconSettings.value = stored
                 }
-            }
-        }
-        viewModelScope.launch {
-            localStore.checklistOrdersFlow.collect { stored ->
-                if (inFlightChecklistWrites.get() == 0) {
-                    _checklistOrders.value = stored
-                }
-            }
-        }
-        viewModelScope.launch {
-            localStore.checklistStyleFlow.collect { stored ->
-                _checklistStyle.value = stored
             }
         }
     }
@@ -688,8 +653,8 @@ class MNotesViewModel(
         showToast: Boolean = true
     ) {
         playSound("done")
-        val clampedX = offsetX.coerceIn(-260f, 260f)
-        val clampedY = offsetY.coerceIn(-260f, 260f)
+        val clampedX = offsetX.coerceIn(-1200f, 1200f)
+        val clampedY = offsetY.coerceIn(-1200f, 1200f)
         val clampedSize = sizeDp.coerceIn(20f, 96f)
         val resolvedMode = smartMode?.ifBlank { "manual" } ?: "manual"
         persistTaskMutation(
@@ -743,8 +708,8 @@ class MNotesViewModel(
         smartMode: String? = null
     ) {
         playSound("done")
-        val clampedX = offsetX.coerceIn(-260f, 260f)
-        val clampedY = offsetY.coerceIn(-260f, 260f)
+        val clampedX = offsetX.coerceIn(-1200f, 1200f)
+        val clampedY = offsetY.coerceIn(-1200f, 1200f)
         val clampedSize = sizeDp.coerceIn(20f, 96f)
         persistTaskMutation(
             optimisticTransform = { list ->
@@ -780,8 +745,8 @@ class MNotesViewModel(
     }
 
     fun updateTaskBadgePosition(taskId: String, offsetX: Float, offsetY: Float) {
-        val clampedX = offsetX.coerceIn(-260f, 260f)
-        val clampedY = offsetY.coerceIn(-260f, 260f)
+        val clampedX = offsetX.coerceIn(-1200f, 1200f)
+        val clampedY = offsetY.coerceIn(-1200f, 1200f)
         persistTaskMutation(
             optimisticTransform = { list ->
                 list.map { existing ->
@@ -949,136 +914,6 @@ class MNotesViewModel(
         }
     }
 
-    fun saveQuickRequest(
-        title: String,
-        body: String,
-        docType: String = preferences.value.reqDefaultDocType,
-        customerName: String = "",
-        amountText: String = "",
-        stampId: String = "none",
-        isSigned: Boolean = false,
-        signatureName: String = preferences.value.reqSignatureName,
-        statusDot: String = "none",
-        statusLabel: String = preferences.value.reqDefaultStatusLabel,
-        splitMode: String = preferences.value.reqDefaultSplitMode,
-        isChecklistOrder: Boolean = false
-    ) {
-        val t = title.trim()
-        val b = body.trim()
-        val c = customerName.trim()
-        if (t.isEmpty() && b.isEmpty() && c.isEmpty()) return
-        playSound("done")
-        val finalTitle = t.ifEmpty {
-            if (isChecklistOrder) b.lineSequence().firstOrNull().orEmpty().take(40)
-            else c.ifEmpty { AppStrings.get(preferences.value.lang, "reqTab") }
-        }.ifEmpty { AppStrings.get(preferences.value.lang, "reqTab") }
-
-        val autoCompleteStamps = setOf("paid_thanks", "paid_thanks_green", "done", "paid_full", "received", "arrived", "ready", "complete")
-        val effectiveSigned = isSigned || (preferences.value.reqAutoSignOnComplete && stampId in autoCompleteStamps && signatureName.isNotBlank())
-
-        val req = QuickRequest(
-            title = finalTitle,
-            body = b,
-            docType = docType,
-            customerName = c,
-            amountText = amountText.trim(),
-            stampId = stampId,
-            isSigned = effectiveSigned,
-            signatureName = signatureName.trim(),
-            statusDot = statusDot,
-            statusLabel = statusLabel.trim(),
-            splitMode = splitMode,
-            isChecklistOrder = isChecklistOrder
-        )
-        viewModelScope.launch {
-            val res = localStore.createRequest(req)
-            if (res.isFailure) {
-                _toastMessage.tryEmit(res.exceptionOrNull()?.localizedMessage ?: "Failed to save request")
-            } else if (preferences.value.autoBackup && auth.currentUser != null) {
-                runCloudBackup(isAuto = true)
-            }
-        }
-    }
-
-    fun toggleRequestDot(requestId: String, targetDot: String) {
-        playSound("nav")
-        viewModelScope.launch {
-            localStore.updateRequest(requestId) { cur ->
-                val nextDot = if (cur.statusDot == targetDot) "none" else targetDot
-                val nextStatus = when (nextDot) {
-                    "green" -> if (cur.statusLabel in setOf("", "غير متاح", "لم يصل", "غير مكتمل")) "وصل / متاح" else cur.statusLabel
-                    "red" -> if (cur.statusLabel in setOf("", "متاح", "وصل", "جاهز", "وصل / متاح")) "لم يصل / غير متاح" else cur.statusLabel
-                    else -> cur.statusLabel
-                }
-                val nextStamp = when {
-                    nextDot == "green" && cur.stampId in setOf("none", "unpaid", "incomplete") -> "paid_thanks"
-                    nextDot == "red" && cur.stampId in setOf("none", "paid_thanks", "done", "arrived", "complete") -> "unpaid"
-                    else -> cur.stampId
-                }
-                val sigName = cur.signatureName.ifBlank { preferences.value.reqSignatureName }
-                val completeStamps = setOf("paid_thanks", "paid_thanks_green", "done", "paid_full", "received", "arrived", "ready", "complete")
-                val autoSigned = cur.isSigned || (preferences.value.reqAutoSignOnComplete && nextStamp in completeStamps && sigName.isNotBlank())
-                cur.copy(
-                    statusDot = nextDot,
-                    statusLabel = nextStatus,
-                    stampId = nextStamp,
-                    isSigned = autoSigned,
-                    signatureName = sigName
-                )
-            }
-        }
-    }
-
-    fun updateRequestStamp(requestId: String, stampId: String) {
-        playSound("done")
-        viewModelScope.launch {
-            localStore.updateRequest(requestId) { cur ->
-                val sigName = cur.signatureName.ifBlank { preferences.value.reqSignatureName }
-                val completeStamps = setOf("paid_thanks", "paid_thanks_green", "done", "paid_full", "received", "arrived", "ready", "complete")
-                val autoSigned = cur.isSigned || (preferences.value.reqAutoSignOnComplete && stampId in completeStamps && sigName.isNotBlank())
-                cur.copy(
-                    stampId = stampId,
-                    isSigned = autoSigned,
-                    signatureName = sigName
-                )
-            }
-        }
-    }
-
-    fun toggleRequestSignature(requestId: String, customName: String = "") {
-        playSound("done")
-        viewModelScope.launch {
-            localStore.updateRequest(requestId) { cur ->
-                val resolvedName = customName.trim().ifBlank {
-                    cur.signatureName.ifBlank { preferences.value.reqSignatureName }
-                }
-                cur.copy(
-                    isSigned = !cur.isSigned,
-                    signatureName = resolvedName
-                )
-            }
-        }
-    }
-
-    fun updateRequestStatusLabel(requestId: String, label: String) {
-        playSound("nav")
-        viewModelScope.launch {
-            localStore.updateRequest(requestId) { cur ->
-                cur.copy(statusLabel = label.trim())
-            }
-        }
-    }
-
-    fun deleteQuickRequest(requestId: String) {
-        playSound("exit")
-        viewModelScope.launch {
-            val res = localStore.deleteRequest(requestId)
-            if (res.isFailure) {
-                _toastMessage.tryEmit(res.exceptionOrNull()?.localizedMessage ?: "Failed to delete request")
-            }
-        }
-    }
-
     fun addFloatingBadge(stateId: String = "sleeping", sizeDp: Float = 46f): String {
         playSound("done")
         val current = _floatingBadges.value
@@ -1195,120 +1030,6 @@ class MNotesViewModel(
         commitFloatingBadgesOptimistic(updated)
     }
 
-    // ==================== BLANK CUSTOMIZABLE ORDERS / CHECKLIST ACTIONS ====================
-
-    private fun commitChecklistOrders(updated: List<ChecklistOrderItem>, toastOnSaved: String? = null) {
-        val indexed = updated.mapIndexed { idx, item -> item.copy(sortOrder = idx.toLong()) }
-        _checklistOrders.value = indexed
-        inFlightChecklistWrites.incrementAndGet()
-        viewModelScope.launch {
-            try {
-                val res = localStore.saveChecklistOrders(indexed)
-                if (res.isSuccess) {
-                    scheduleDebouncedAutoBackup()
-                    if (!toastOnSaved.isNullOrBlank()) {
-                        _toastMessage.tryEmit(toastOnSaved)
-                    }
-                } else {
-                    _toastMessage.tryEmit(res.exceptionOrNull()?.localizedMessage ?: "Failed to save items")
-                }
-            } finally {
-                inFlightChecklistWrites.decrementAndGet()
-            }
-        }
-    }
-
-    fun addChecklistOrderItems(texts: List<String>) {
-        val clean = texts.map { it.trim() }.filter { it.isNotEmpty() }
-        if (clean.isEmpty()) return
-        playSound("done")
-        val base = _checklistOrders.value
-        val newItems = clean.mapIndexed { idx, text ->
-            ChecklistOrderItem(
-                id = "ord_${UUID.randomUUID().toString().take(10)}",
-                text = text,
-                status = ChecklistOrderItem.STATUS_NONE,
-                sortOrder = (base.size + idx).toLong()
-            )
-        }
-        val lang = preferences.value.lang
-        commitChecklistOrders(
-            updated = base + newItems,
-            toastOnSaved = if (lang == "en") "Saved ${newItems.size} item(s)" else "تم حفظ ${newItems.size} عنصر بنجاح"
-        )
-    }
-
-    fun cycleChecklistOrderStatus(itemId: String) {
-        playSound("nav")
-        val updated = _checklistOrders.value.map { item ->
-            if (item.id == itemId) {
-                item.copy(status = ChecklistOrderItem.nextCycledStatus(item.status))
-            } else item
-        }
-        commitChecklistOrders(updated)
-    }
-
-    fun setChecklistOrderStatus(itemId: String, status: String) {
-        playSound(if (status == ChecklistOrderItem.STATUS_CHECK) "done" else "nav")
-        val updated = _checklistOrders.value.map { item ->
-            if (item.id == itemId) item.copy(status = status) else item
-        }
-        commitChecklistOrders(updated)
-    }
-
-    fun updateChecklistOrderText(itemId: String, newText: String) {
-        val trimmed = newText.trim()
-        if (trimmed.isEmpty()) return
-        playSound("done")
-        val updated = _checklistOrders.value.map { item ->
-            if (item.id == itemId) item.copy(text = trimmed) else item
-        }
-        commitChecklistOrders(updated)
-    }
-
-    fun moveChecklistOrderItem(itemId: String, delta: Int) {
-        val list = _checklistOrders.value.toMutableList()
-        val idx = list.indexOfFirst { it.id == itemId }
-        if (idx < 0) return
-        val target = (idx + delta).coerceIn(0, list.lastIndex)
-        if (target == idx) return
-        playSound("nav")
-        val moving = list.removeAt(idx)
-        list.add(target, moving)
-        commitChecklistOrders(list)
-    }
-
-    fun deleteChecklistOrderItem(itemId: String) {
-        playSound("exit")
-        val updated = _checklistOrders.value.filterNot { it.id == itemId }
-        commitChecklistOrders(updated)
-    }
-
-    fun clearAllChecklistOrders() {
-        playSound("exit")
-        commitChecklistOrders(emptyList())
-    }
-
-    fun saveChecklistStyle(style: ChecklistStyleConfig) {
-        playSound("done")
-        val normalized = style.copy(
-            circleSizeDp = style.circleSizeDp.coerceIn(22, 52),
-            markSizeDp = style.markSizeDp.coerceIn(10, 34),
-            itemSpacingDp = style.itemSpacingDp.coerceIn(4, 22)
-        )
-        _checklistStyle.value = normalized
-        viewModelScope.launch {
-            val res = localStore.saveChecklistStyle(normalized)
-            if (res.isSuccess) {
-                scheduleDebouncedAutoBackup()
-                val lang = preferences.value.lang
-                _toastMessage.tryEmit(
-                    if (lang == "en") "Checkmark & X style saved!" else "تم حفظ تصميم علامات الصح والغلط!"
-                )
-            }
-        }
-    }
-
     suspend fun cropAndSavePhoto(
         uri: Uri,
         offsetXNorm: Float,
@@ -1390,7 +1111,6 @@ class MNotesViewModel(
     fun buildBackupSnapshot(): BackupSnapshotPayload {
         val p = preferences.value
         val tasks = (tasksState.value as? UiState.Success)?.data ?: emptyList()
-        val requests = (requestsState.value as? UiState.Success)?.data ?: emptyList()
         val isoNow = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).format(Date())
         return BackupSnapshotPayload(
             version = "1.0",
@@ -1488,26 +1208,9 @@ class MNotesViewModel(
                     badgeLocked = it.badgeLocked
                 )
             },
-            requests = requests.map {
-                BackupRequestDto(
-                    title = it.title,
-                    body = it.body,
-                    docType = it.docType,
-                    customerName = it.customerName,
-                    amountText = it.amountText,
-                    stampId = it.stampId,
-                    isSigned = it.isSigned,
-                    signatureName = it.signatureName,
-                    statusDot = it.statusDot,
-                    statusLabel = it.statusLabel,
-                    splitMode = it.splitMode,
-                    isChecklistOrder = it.isChecklistOrder
-                )
-            },
+            requests = emptyList(),
             floatingBadges = floatingBadges.value,
-            smartIconSettings = smartIconSettings.value,
-            checklistOrders = checklistOrders.value,
-            checklistStyle = checklistStyle.value
+            smartIconSettings = smartIconSettings.value
         )
     }
 
@@ -1528,8 +1231,6 @@ class MNotesViewModel(
             if (res.isSuccess) {
                 lastSmartSettingsMutationAtMs = 0L
                 _smartIconSettings.value = snapshot.smartIconSettings
-                _checklistOrders.value = snapshot.checklistOrders
-                _checklistStyle.value = snapshot.checklistStyle
                 if (snapshot.floatingBadges.isNotEmpty()) {
                     _floatingBadges.value = snapshot.floatingBadges
                 }
@@ -1613,8 +1314,6 @@ class MNotesViewModel(
                         }
                         lastSmartSettingsMutationAtMs = 0L
                         _smartIconSettings.value = snapshot.smartIconSettings
-                        _checklistOrders.value = snapshot.checklistOrders
-                        _checklistStyle.value = snapshot.checklistStyle
                         _lastBackupStatus.value = "success"
                         _lastBackupError.value = null
                         playSound("done")

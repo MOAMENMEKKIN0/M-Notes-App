@@ -85,37 +85,120 @@ class LocalMediaRepository(private val context: Context) {
     }
 
     /**
-     * Copies a user-picked wallpaper image into private app storage (downscaled cleanly to <= 1600px)
+     * Copies a user-picked wallpaper image into private app storage (downscaled cleanly to <= 1920px)
      * so it persists permanently across app restarts without relying on temporary content URI grants.
+     *
+     * Reads the content URI ONCE into a temporary cache file (with ContentResolver stream,
+     * AssetFileDescriptor, ParcelFileDescriptor, and file:// fallbacks) so PickVisualMedia,
+     * SAF documents, and cloud gallery providers never fail on double-open or inJustDecodeBounds.
      */
     suspend fun saveWallpaperImage(sourceUri: Uri): Result<String> = withContext(Dispatchers.IO) {
+        var tempFile: File? = null
         runCatching {
-            val boundsOpts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            context.contentResolver.openInputStream(sourceUri)?.use {
-                BitmapFactory.decodeStream(it, null, boundsOpts)
-            } ?: error("Cannot open wallpaper image URI")
+            val cacheCopy = File(context.cacheDir, "wp_import_${System.currentTimeMillis()}.tmp")
+            tempFile = cacheCopy
 
-            val maxDim = maxOf(boundsOpts.outWidth, boundsOpts.outHeight).coerceAtLeast(1)
-            var sampleSize = 1
-            while (maxDim / sampleSize > 1600) {
-                sampleSize *= 2
+            val copiedBytes = copyUriToTempFile(sourceUri, cacheCopy)
+            if (copiedBytes <= 0L || !cacheCopy.exists() || cacheCopy.length() <= 0L) {
+                error("Cannot read selected wallpaper image")
             }
-            val decodeOpts = BitmapFactory.Options().apply {
-                inSampleSize = sampleSize
-                inPreferredConfig = Bitmap.Config.ARGB_8888
-            }
-            val decoded = context.contentResolver.openInputStream(sourceUri)?.use {
-                BitmapFactory.decodeStream(it, null, decodeOpts)
-            } ?: error("Failed to decode wallpaper image")
+
+            val decoded = decodeDownscaledBitmap(cacheCopy, maxDimension = 1920)
+                ?: error("Unsupported or corrupted wallpaper image")
 
             val dir = File(context.filesDir, "mnotes_wallpapers").apply { mkdirs() }
             val outFile = File(dir, "wallpaper_${System.currentTimeMillis()}.jpg")
             FileOutputStream(outFile).use { fos ->
-                decoded.compress(Bitmap.CompressFormat.JPEG, 90, fos)
+                decoded.compress(Bitmap.CompressFormat.JPEG, 92, fos)
             }
             decoded.recycle()
             outFile.absolutePath
+        }.also {
+            runCatching { tempFile?.delete() }
         }
+    }
+
+    private fun copyUriToTempFile(sourceUri: Uri, destFile: File): Long {
+        val resolver = context.contentResolver
+        // 1. Primary: ContentResolver.openInputStream
+        val fromStream = runCatching {
+            resolver.openInputStream(sourceUri)?.use { input ->
+                FileOutputStream(destFile).use { output -> input.copyTo(output) }
+            }
+        }.getOrNull()
+        if (fromStream != null && fromStream > 0L) return fromStream
+
+        // 2. Fallback: openAssetFileDescriptor (works with certain Photo Picker / MediaStore URIs)
+        val fromAssetFd = runCatching {
+            resolver.openAssetFileDescriptor(sourceUri, "r")?.use { afd ->
+                afd.createInputStream().use { input ->
+                    FileOutputStream(destFile).use { output -> input.copyTo(output) }
+                }
+            }
+        }.getOrNull()
+        if (fromAssetFd != null && fromAssetFd > 0L) return fromAssetFd
+
+        // 3. Fallback: openFileDescriptor
+        val fromPfd = runCatching {
+            resolver.openFileDescriptor(sourceUri, "r")?.use { pfd ->
+                java.io.FileInputStream(pfd.fileDescriptor).use { input ->
+                    FileOutputStream(destFile).use { output -> input.copyTo(output) }
+                }
+            }
+        }.getOrNull()
+        if (fromPfd != null && fromPfd > 0L) return fromPfd
+
+        // 4. Fallback: direct file:// URI
+        if (sourceUri.scheme.equals("file", ignoreCase = true) && !sourceUri.path.isNullOrBlank()) {
+            val src = File(sourceUri.path!!)
+            if (src.exists() && src.canRead()) {
+                return src.inputStream().use { input ->
+                    FileOutputStream(destFile).use { output -> input.copyTo(output) }
+                }
+            }
+        }
+        return 0L
+    }
+
+    private fun decodeDownscaledBitmap(file: File, maxDimension: Int): Bitmap? {
+        // On Android 9+, ImageDecoder handles EXIF orientation, HEIF/HEIC, WebP, PNG, JPEG cleanly.
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            val fromDecoder = runCatching {
+                val source = android.graphics.ImageDecoder.createSource(file)
+                android.graphics.ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+                    decoder.allocator = android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE
+                    val w = info.size.width.coerceAtLeast(1)
+                    val h = info.size.height.coerceAtLeast(1)
+                    val maxSide = maxOf(w, h)
+                    if (maxSide > maxDimension) {
+                        val scale = maxDimension.toFloat() / maxSide.toFloat()
+                        decoder.setTargetSize(
+                            (w * scale).toInt().coerceAtLeast(1),
+                            (h * scale).toInt().coerceAtLeast(1)
+                        )
+                    }
+                }
+            }.getOrNull()
+            if (fromDecoder != null) return fromDecoder
+        }
+
+        // Reliable universal fallback (also used by Robolectric JVM tests)
+        val boundsOpts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(file.absolutePath, boundsOpts)
+        val rawW = boundsOpts.outWidth
+        val rawH = boundsOpts.outHeight
+        var sampleSize = 1
+        if (rawW > 0 && rawH > 0) {
+            val maxDim = maxOf(rawW, rawH)
+            while (maxDim / sampleSize > maxDimension) {
+                sampleSize *= 2
+            }
+        }
+        val decodeOpts = BitmapFactory.Options().apply {
+            inSampleSize = sampleSize
+            inPreferredConfig = Bitmap.Config.ARGB_8888
+        }
+        return BitmapFactory.decodeFile(file.absolutePath, decodeOpts)
     }
 
     suspend fun addLibraryPhoto(name: String, filePath: String) {

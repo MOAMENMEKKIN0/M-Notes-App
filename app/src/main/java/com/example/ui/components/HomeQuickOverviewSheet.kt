@@ -25,7 +25,6 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DashboardCustomize
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.NotificationsActive
-import androidx.compose.material.icons.rounded.ReceiptLong
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -57,11 +56,9 @@ fun HomeQuickOverviewSheet(
     dueTodayCount: Int,
     allTasks: List<SmartTask>,
     selectedDayFilter: Int?,
-    requestsCount: Int,
     onEditTask: (SmartTask) -> Unit,
     onPreviewAlert: (SmartTask) -> Unit,
     onAddTask: () -> Unit,
-    onOpenRequestsPage: () -> Unit,
     onOpenHomeSettings: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -111,9 +108,9 @@ fun HomeQuickOverviewSheet(
                     )
                     Text(
                         text = if (lang == "en") {
-                            "$dueTodayCount due today • ${allTasks.size} total • $requestsCount orders"
+                            "$dueTodayCount due today • ${allTasks.size} total tasks"
                         } else {
-                            "$dueTodayCount مهام اليوم • ${allTasks.size} الإجمالي • $requestsCount طلبات"
+                            "$dueTodayCount مهام اليوم • ${allTasks.size} إجمالي المهام"
                         },
                         color = colors.textMuted,
                         fontSize = (11.5f * textScale).sp
@@ -132,61 +129,30 @@ fun HomeQuickOverviewSheet(
                 }
             }
 
-            // Quick Jump Action Grid
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            // Quick Jump Action
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = colors.primarySoft,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, colors.primary.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
+                    .clip(RoundedCornerShape(16.dp))
+                    .clickable {
+                        safeDismisser.dismiss { onOpenHomeSettings() }
+                    }
             ) {
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = colors.primarySoft,
-                    modifier = Modifier
-                        .weight(1f)
-                        .border(1.dp, colors.primary.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
-                        .clip(RoundedCornerShape(16.dp))
-                        .clickable {
-                            safeDismisser.dismiss { onOpenHomeSettings() }
-                        }
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(Icons.Rounded.DashboardCustomize, contentDescription = null, tint = colors.primary, modifier = Modifier.size(18.dp))
-                        Text(
-                            text = if (lang == "en") "Customize Home" else "ضبط الواجهة والأحجام",
-                            color = colors.primary,
-                            fontSize = (11.5f * textScale).sp,
-                            fontWeight = FontWeight.ExtraBold
-                        )
-                    }
-                }
-
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = colors.cardBg,
-                    modifier = Modifier
-                        .weight(1f)
-                        .border(1.dp, colors.borderSoft, RoundedCornerShape(16.dp))
-                        .clip(RoundedCornerShape(16.dp))
-                        .clickable {
-                            safeDismisser.dismiss { onOpenRequestsPage() }
-                        }
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(Icons.Rounded.ReceiptLong, contentDescription = null, tint = colors.primary, modifier = Modifier.size(18.dp))
-                        Text(
-                            text = if (lang == "en") "Orders ($requestsCount)" else "الطلبات ($requestsCount)",
-                            color = colors.textDark,
-                            fontSize = (11.5f * textScale).sp,
-                            fontWeight = FontWeight.ExtraBold
-                        )
-                    }
+                    Icon(Icons.Rounded.DashboardCustomize, contentDescription = null, tint = colors.primary, modifier = Modifier.size(18.dp))
+                    Text(
+                        text = if (lang == "en") "Customize Home Layout & Sizes" else "ضبط الواجهة الرئيسية والأحجام",
+                        color = colors.primary,
+                        fontSize = (12f * textScale).sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
                 }
             }
 

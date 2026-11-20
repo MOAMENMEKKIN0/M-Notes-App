@@ -55,7 +55,6 @@ import androidx.compose.material.icons.rounded.Mood
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material.icons.rounded.ReceiptLong
 import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material.icons.rounded.TextFields
 import androidx.compose.material.icons.rounded.Upload
@@ -270,9 +269,6 @@ fun SettingsSheet(
             viewModel.updatePreference(mapOf("bannerSub" to bannerSubDraft.take(200)))
         }
     }
-
-    // Demo top bar preview state
-    var demoTopPage by remember { mutableIntStateOf(0) }
 
     ModalBottomSheet(
         onDismissRequest = { safeDismisser.onSystemDismiss() },
@@ -1495,32 +1491,14 @@ fun SettingsSheet(
                     }
 
                     SettingsSubAccordion(
-                        title = AppStrings.get(lang, "sTopbar"),
+                        title = if (lang == "en") "Gestures & Haptics" else "الإيماءات والاهتزاز",
                         isOpen = openSubSection == "topbar",
                         onToggle = {
                             viewModel.playSound("nav")
                             openSubSection = if (openSubSection == "topbar") null else "topbar"
                         }
                     ) {
-                        TopBarSwitcher(
-                            styleId = prefs.topBarStyle,
-                            currentPage = demoTopPage,
-                            lang = lang,
-                            onSelectPage = {
-                                viewModel.playSound("nav")
-                                demoTopPage = it
-                            }
-                        )
-                        Spacer(Modifier.height(10.dp))
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            SettingsSwitchRow(
-                                title = AppStrings.get(lang, "swPg"),
-                                checked = prefs.swipePages,
-                                onCheckedChange = {
-                                    viewModel.playSound("nav")
-                                    viewModel.updatePreference(mapOf("swipePages" to it))
-                                }
-                            )
                             SettingsSwitchRow(
                                 title = AppStrings.get(lang, "swCl"),
                                 checked = prefs.swipeClose,
@@ -1537,20 +1515,6 @@ fun SettingsSheet(
                                     viewModel.updatePreference(mapOf("hapticEnabled" to it))
                                 }
                             )
-                        }
-                        Spacer(Modifier.height(10.dp))
-                        SectionMiniLabel(AppStrings.get(lang, "tbStyle"))
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            MNotesCatalog.topBarStyles.forEach { opt ->
-                                SettingsSwitchRow(
-                                    title = "${opt.id} • ${if (lang == "en") opt.nameEn else opt.nameAr}",
-                                    checked = prefs.topBarStyle == opt.id,
-                                    onCheckedChange = {
-                                        viewModel.playSound("nav")
-                                        viewModel.updatePreference(mapOf("topBarStyle" to opt.id))
-                                    }
-                                )
-                            }
                         }
                     }
                 }
@@ -2150,10 +2114,10 @@ fun SettingsSheet(
                 )
             }
 
-            // 9. External Home-Screen App Icon Switcher & Color Studio (12 Icons + Custom Colors)
+            // 9. External Home-Screen App Icon Switcher & Color Studio (12 Samsung One UI Pixar 3D Icons)
             SettingsFolder(
-                title = if (lang == "en") "App Icons & Custom Colors" else "أيقونة الهاتف الخارجية وألوانها (١٢ شكل)",
-                subtitle = if (lang == "en") "Rounded & organic beige, mint, white, baby blue + custom" else "مدورة وعضوية للتذكير والحرف بالبيج والمينت واللبني والأبيض",
+                title = if (lang == "en") "App Icons & Custom Colors" else "أيقونة الهاتف الخارجية (١٢ أيقونة 3D بيكسار)",
+                subtitle = if (lang == "en") "12 Samsung One UI squircle Pixar 3D character icons + custom" else "١٢ أيقونة بنمط سامسونج One UI وشخصيات 3D بيكسار + ألوان مخصصة",
                 icon = Icons.Rounded.Apps,
                 isOpen = openFolder == "appIcon",
                 lang = lang,
@@ -2169,29 +2133,10 @@ fun SettingsSheet(
                 )
             }
 
-            // 10. Dedicated Requests, Invoices, Cheques & Orders Folder
+            // 10. Dedicated Floating Circular Icon Studio (Interactive Preview + 160+ Icons incl. Bald Male 3D Expressions)
             SettingsFolder(
-                title = if (lang == "en") "Requests, Invoices & Cheques" else "ضبط صفحة الطلبات والفواتير والشيكات",
-                subtitle = if (lang == "en") "Signature, stamps, red/green dots, word split & toggles" else "التوقيع والأختام وتقسيم الكلام وقائمة الأوردرات",
-                icon = Icons.Rounded.ReceiptLong,
-                isOpen = openFolder == "requests",
-                lang = lang,
-                onToggle = {
-                    viewModel.playSound("nav")
-                    openFolder = if (openFolder == "requests") null else "requests"
-                }
-            ) {
-                RequestsSettingsFolderContent(
-                    prefs = prefs,
-                    lang = lang,
-                    viewModel = viewModel
-                )
-            }
-
-            // 11. Dedicated Floating Circular Icon Studio (Interactive Preview + 150+ Icons incl. 3D Pixar Characters)
-            SettingsFolder(
-                title = if (lang == "en") "Floating Circular Icon & 3D Library" else "الأيقونة الدائرية العائمة (مكتبة 150+ أيقونة وشخصيات 3D)",
-                subtitle = if (lang == "en") "36 Pixar 3D characters, baby icons, live resize, drag & save" else "36 شخصية 3D Pixar جديدة + أيقونات الطفل + سحب وحفظ فوري",
+                title = if (lang == "en") "Floating Circular Icon & 3D Library" else "الأيقونة الدائرية العائمة (مكتبة 160+ أيقونة وشخصيات 3D)",
+                subtitle = if (lang == "en") "Bald male Pixar 3D expressions, gym icons, drag, toggle & save" else "تعبيرات وشخصيات رجال 3D Pixar + أيقونات الجيم + سحب وتحديد وحفظ فوري",
                 icon = Icons.Rounded.Mood,
                 isOpen = openFolder == "characterBadge",
                 lang = lang,

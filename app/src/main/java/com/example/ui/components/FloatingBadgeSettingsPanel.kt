@@ -1046,14 +1046,12 @@ private fun ScreenFloatingCopiesPanel(
     var selectedBadgeId by remember { mutableStateOf<String?>(badges.firstOrNull()?.id) }
 
     LaunchedEffect(badges) {
-        if (badges.isEmpty()) {
+        if (selectedBadgeId != null && badges.none { it.id == selectedBadgeId }) {
             selectedBadgeId = null
-        } else if (selectedBadgeId == null || badges.none { it.id == selectedBadgeId }) {
-            selectedBadgeId = badges.first().id
         }
     }
 
-    val selectedBadge = badges.firstOrNull { it.id == selectedBadgeId } ?: badges.firstOrNull()
+    val selectedBadge = selectedBadgeId?.let { id -> badges.firstOrNull { it.id == id } }
     val visibleCount = badges.count { it.visible }
 
     var selectedCategoryId by remember { mutableStateOf("all") }
@@ -1103,11 +1101,14 @@ private fun ScreenFloatingCopiesPanel(
 
                 LiveFloatingIconPreviewStage(
                     badges = badges,
-                    selectedBadgeId = selectedBadge?.id,
+                    selectedBadgeId = selectedBadgeId,
                     prefs = prefs,
                     sampleTask = sampleTask,
                     lang = lang,
-                    onSelectBadge = { id -> selectedBadgeId = id },
+                    onSelectBadge = { id ->
+                        viewModel.playSound("nav")
+                        selectedBadgeId = toggleFloatingIconSelection(selectedBadgeId, id)
+                    },
                     onDragBadge = { id, xFrac, yFrac ->
                         selectedBadgeId = id
                         viewModel.updateFloatingBadgePosition(id, xFrac, yFrac)
@@ -1181,7 +1182,7 @@ private fun ScreenFloatingCopiesPanel(
             }
         }
 
-        if (selectedBadge != null) {
+        if (badges.isNotEmpty()) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1189,7 +1190,7 @@ private fun ScreenFloatingCopiesPanel(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 badges.forEachIndexed { idx, item ->
-                    val isSelected = item.id == selectedBadge.id
+                    val isSelected = item.id == selectedBadgeId
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -1203,9 +1204,10 @@ private fun ScreenFloatingCopiesPanel(
                             )
                             .clickable {
                                 viewModel.playSound("nav")
-                                selectedBadgeId = item.id
+                                selectedBadgeId = toggleFloatingIconSelection(selectedBadgeId, item.id)
                             }
                             .padding(horizontal = 10.dp, vertical = 6.dp)
+                            .testTag("floating_copy_chip_${item.id}")
                     ) {
                         FloatingBadgeVisual(
                             iconId = item.state,
@@ -1222,6 +1224,9 @@ private fun ScreenFloatingCopiesPanel(
                     }
                 }
             }
+        }
+
+        if (selectedBadge != null) {
 
             Surface(
                 shape = RoundedCornerShape(18.dp),
@@ -1468,88 +1473,95 @@ private fun LiveFloatingIconPreviewStage(
             }
         }
 
-        badges.filter { it.visible }.forEach { badge ->
-            val previewVisualDp = (badge.sizeDp * 0.72f).coerceIn(28f, 92f)
-            val totalBoxPx = with(density) { (previewVisualDp * 1.44f).dp.toPx() }
-            val maxX = (stageWidthPx - totalBoxPx).coerceAtLeast(1f)
-            val maxY = (stageHeightPx - totalBoxPx).coerceAtLeast(1f)
+        androidx.compose.runtime.CompositionLocalProvider(
+            androidx.compose.ui.platform.LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Ltr
+        ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                badges.filter { it.visible }.forEach { badge ->
+                    val previewVisualDp = (badge.sizeDp * 0.72f).coerceIn(28f, 92f)
+                    val boxSizeDp = maxOf(previewVisualDp, 48f)
+                    val totalBoxPx = with(density) { boxSizeDp.dp.toPx() }
+                    val maxX = (stageWidthPx - totalBoxPx).coerceAtLeast(1f)
+                    val maxY = (stageHeightPx - totalBoxPx).coerceAtLeast(1f)
 
-            var posX by remember(badge.id, maxX) { mutableFloatStateOf((badge.xFraction.coerceIn(0f, 1f)) * maxX) }
-            var posY by remember(badge.id, maxY) { mutableFloatStateOf((badge.yFraction.coerceIn(0f, 1f)) * maxY) }
-            var isDragging by remember(badge.id) { mutableStateOf(false) }
+                    var posX by remember(badge.id, maxX) { mutableFloatStateOf((badge.xFraction.coerceIn(0f, 1f)) * maxX) }
+                    var posY by remember(badge.id, maxY) { mutableFloatStateOf((badge.yFraction.coerceIn(0f, 1f)) * maxY) }
+                    var isDragging by remember(badge.id) { mutableStateOf(false) }
 
-            LaunchedEffect(badge.xFraction, badge.yFraction, maxX, maxY) {
-                if (!isDragging) {
-                    posX = badge.xFraction.coerceIn(0f, 1f) * maxX
-                    posY = badge.yFraction.coerceIn(0f, 1f) * maxY
-                }
-            }
-
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .graphicsLayer {
-                        translationX = posX
-                        translationY = posY
+                    LaunchedEffect(badge.xFraction, badge.yFraction, maxX, maxY) {
+                        if (!isDragging) {
+                            posX = badge.xFraction.coerceIn(0f, 1f) * maxX
+                            posY = badge.yFraction.coerceIn(0f, 1f) * maxY
+                        }
                     }
-                    .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-                    .pointerInput(badge.id, maxX, maxY) {
-                        val dragThresholdPx = 3.5.dp.toPx()
-                        val dragThresholdSq = dragThresholdPx * dragThresholdPx
-                        awaitEachGesture {
-                            val down = awaitFirstDown(requireUnconsumed = false)
-                            val pointerId = down.id
-                            down.consume()
-                            var totalDx = 0f
-                            var totalDy = 0f
-                            var dragging = false
-                            while (true) {
-                                val event = awaitPointerEvent(PointerEventPass.Main)
-                                val change = event.changes.firstOrNull { it.id == pointerId } ?: break
-                                if (!change.pressed) {
-                                    change.consume()
-                                    if (dragging) {
-                                        isDragging = false
-                                        latestOnDrag(
-                                            badge.id,
-                                            (posX / maxX).coerceIn(0f, 1f),
-                                            (posY / maxY).coerceIn(0f, 1f)
-                                        )
-                                    } else {
-                                        latestOnSelect(badge.id)
-                                    }
-                                    break
-                                }
-                                val delta = change.positionChange()
-                                if (delta.x != 0f || delta.y != 0f) {
-                                    change.consume()
-                                    if (!dragging) {
-                                        totalDx += delta.x
-                                        totalDy += delta.y
-                                        if (totalDx * totalDx + totalDy * totalDy >= dragThresholdSq) {
-                                            dragging = true
-                                            isDragging = true
-                                            latestOnSelect(badge.id)
-                                            posX = (posX + totalDx).coerceIn(0f, maxX)
-                                            posY = (posY + totalDy).coerceIn(0f, maxY)
+
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .graphicsLayer {
+                                translationX = posX
+                                translationY = posY
+                            }
+                            .size(boxSizeDp.dp)
+                            .pointerInput(badge.id, maxX, maxY) {
+                                val dragThresholdPx = 3.5.dp.toPx()
+                                val dragThresholdSq = dragThresholdPx * dragThresholdPx
+                                awaitEachGesture {
+                                    val down = awaitFirstDown(requireUnconsumed = false)
+                                    val pointerId = down.id
+                                    down.consume()
+                                    var totalDx = 0f
+                                    var totalDy = 0f
+                                    var dragging = false
+                                    while (true) {
+                                        val event = awaitPointerEvent(PointerEventPass.Main)
+                                        val change = event.changes.firstOrNull { it.id == pointerId } ?: break
+                                        if (!change.pressed) {
+                                            change.consume()
+                                            if (dragging) {
+                                                isDragging = false
+                                                latestOnDrag(
+                                                    badge.id,
+                                                    (posX / maxX).coerceIn(0f, 1f),
+                                                    (posY / maxY).coerceIn(0f, 1f)
+                                                )
+                                            } else {
+                                                latestOnSelect(badge.id)
+                                            }
+                                            break
                                         }
-                                    } else {
-                                        posX = (posX + delta.x).coerceIn(0f, maxX)
-                                        posY = (posY + delta.y).coerceIn(0f, maxY)
+                                        val delta = change.positionChange()
+                                        if (delta.x != 0f || delta.y != 0f) {
+                                            change.consume()
+                                            if (!dragging) {
+                                                totalDx += delta.x
+                                                totalDy += delta.y
+                                                if (totalDx * totalDx + totalDy * totalDy >= dragThresholdSq) {
+                                                    dragging = true
+                                                    isDragging = true
+                                                    posX = (posX + totalDx).coerceIn(0f, maxX)
+                                                    posY = (posY + totalDy).coerceIn(0f, maxY)
+                                                }
+                                            } else {
+                                                posX = (posX + delta.x).coerceIn(0f, maxX)
+                                                posY = (posY + delta.y).coerceIn(0f, maxY)
+                                            }
+                                        }
                                     }
                                 }
                             }
-                        }
+                    ) {
+                        FloatingBadgeVisual(
+                            iconId = badge.state,
+                            sizeDp = previewVisualDp,
+                            contentDescription = null,
+                            modifier = if (badge.id == selectedBadgeId) {
+                                Modifier.border(2.dp, colors.primary, CircleShape)
+                            } else Modifier
+                        )
                     }
-            ) {
-                FloatingBadgeVisual(
-                    iconId = badge.state,
-                    sizeDp = previewVisualDp,
-                    contentDescription = null,
-                    modifier = if (badge.id == selectedBadgeId) {
-                        Modifier.border(1.5.dp, colors.primary.copy(alpha = 0.65f), CircleShape)
-                    } else Modifier
-                )
+                }
             }
         }
     }

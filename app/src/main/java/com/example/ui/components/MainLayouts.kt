@@ -86,7 +86,6 @@ fun TasksWorkspaceRouter(
     prefs: UserPreferences,
     allTasks: List<SmartTask>,
     smartIconSettings: SmartIconSettings = SmartIconSettings(),
-    requestsCount: Int,
     tasksState: UiState<List<SmartTask>>,
     searchQuery: String,
     onSearchChange: (String) -> Unit,
@@ -99,8 +98,7 @@ fun TasksWorkspaceRouter(
     onTaskBadgeTap: (SmartTask) -> Unit = {},
     onTaskBadgeDrag: (taskId: String, offsetX: Float, offsetY: Float) -> Unit = { _, _, _ -> },
     onPreviewTaskAlert: (SmartTask) -> Unit,
-    onOpenOverview: (Int?) -> Unit,
-    onOpenRequestsPage: () -> Unit
+    onOpenOverview: (Int?) -> Unit
 ) {
     val dur = motionDurationMsForHz(LocalMNotesRefreshHz.current)
     var activeFilter by remember { mutableStateOf(TaskFilter.ALL) }
@@ -146,7 +144,6 @@ fun TasksWorkspaceRouter(
                 dueTasks = dueTasks,
                 smartIconSettings = smartIconSettings,
                 dueTodayTotal = dueTodayTotal,
-                requestsCount = requestsCount,
                 tasksState = tasksState,
                 searchQuery = searchQuery,
                 activeFilter = activeFilter,
@@ -161,8 +158,7 @@ fun TasksWorkspaceRouter(
                 onTaskBadgeTap = onTaskBadgeTap,
                 onTaskBadgeDrag = onTaskBadgeDrag,
                 onPreviewTaskAlert = onPreviewTaskAlert,
-                onOpenOverview = onOpenOverview,
-                onOpenRequestsPage = onOpenRequestsPage
+                onOpenOverview = onOpenOverview
             )
             "L3" -> TasksWorkspaceL3(
                 prefs = prefs,
@@ -170,7 +166,6 @@ fun TasksWorkspaceRouter(
                 dueTasks = dueTasks,
                 smartIconSettings = smartIconSettings,
                 dueTodayTotal = dueTodayTotal,
-                requestsCount = requestsCount,
                 tasksState = tasksState,
                 searchQuery = searchQuery,
                 activeFilter = activeFilter,
@@ -193,7 +188,6 @@ fun TasksWorkspaceRouter(
                 dueTasks = dueTasks,
                 smartIconSettings = smartIconSettings,
                 dueTodayTotal = dueTodayTotal,
-                requestsCount = requestsCount,
                 tasksState = tasksState,
                 searchQuery = searchQuery,
                 activeFilter = activeFilter,
@@ -208,8 +202,7 @@ fun TasksWorkspaceRouter(
                 onTaskBadgeTap = onTaskBadgeTap,
                 onTaskBadgeDrag = onTaskBadgeDrag,
                 onPreviewTaskAlert = onPreviewTaskAlert,
-                onOpenOverview = onOpenOverview,
-                onOpenRequestsPage = onOpenRequestsPage
+                onOpenOverview = onOpenOverview
             )
         }
     }
@@ -225,7 +218,6 @@ private fun TasksWorkspaceL1(
     dueTasks: List<SmartTask>,
     smartIconSettings: SmartIconSettings,
     dueTodayTotal: Int,
-    requestsCount: Int,
     tasksState: UiState<List<SmartTask>>,
     searchQuery: String,
     activeFilter: TaskFilter,
@@ -240,8 +232,7 @@ private fun TasksWorkspaceL1(
     onTaskBadgeTap: (SmartTask) -> Unit,
     onTaskBadgeDrag: (String, Float, Float) -> Unit,
     onPreviewTaskAlert: (SmartTask) -> Unit,
-    onOpenOverview: (Int?) -> Unit,
-    onOpenRequestsPage: () -> Unit
+    onOpenOverview: (Int?) -> Unit
 ) {
     val colors = LocalMNotesColors.current
     val textScale = LocalMNotesTextScale.current
@@ -345,10 +336,13 @@ private fun TasksWorkspaceL1(
                                     onFilterChange(if (activeFilter == TaskFilter.GYM) TaskFilter.ALL else TaskFilter.GYM)
                                 }
                             )
+                            val alertsCount = allTasks.count { it.alertEnabled && it.alertTime.isNotBlank() }
                             StatMiniChip(
-                                icon = Icons.Rounded.Bolt,
-                                label = if (lang == "en") "$requestsCount Notes" else "$requestsCount طلبات",
-                                onClick = onOpenRequestsPage
+                                icon = Icons.Rounded.NotificationsActive,
+                                label = if (lang == "en") "$alertsCount Alerts" else "$alertsCount تنبيهات",
+                                onClick = {
+                                    onFilterChange(if (activeFilter == TaskFilter.ALERTS) TaskFilter.ALL else TaskFilter.ALERTS)
+                                }
                             )
                         }
                         val firstCycle = cycleTasks.firstOrNull()
@@ -478,7 +472,6 @@ private fun TasksWorkspaceL2(
     dueTasks: List<SmartTask>,
     smartIconSettings: SmartIconSettings,
     dueTodayTotal: Int,
-    requestsCount: Int,
     tasksState: UiState<List<SmartTask>>,
     searchQuery: String,
     activeFilter: TaskFilter,
@@ -493,8 +486,7 @@ private fun TasksWorkspaceL2(
     onTaskBadgeTap: (SmartTask) -> Unit,
     onTaskBadgeDrag: (String, Float, Float) -> Unit,
     onPreviewTaskAlert: (SmartTask) -> Unit,
-    onOpenOverview: (Int?) -> Unit,
-    onOpenRequestsPage: () -> Unit
+    onOpenOverview: (Int?) -> Unit
 ) {
     val colors = LocalMNotesColors.current
     val textScale = LocalMNotesTextScale.current
@@ -665,20 +657,20 @@ private fun TasksWorkspaceL2(
                                 .weight(1f)
                                 .border(1.dp, colors.borderSoft, RoundedCornerShape(18.dp))
                                 .clip(RoundedCornerShape(18.dp))
-                                .clickable { onOpenRequestsPage() }
+                                .clickable { onOpenOverview(null) }
                         ) {
                             Column(
                                 modifier = Modifier.padding((14f * cardScale).dp),
                                 verticalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 Text(
-                                    text = "${allTasks.size + requestsCount} ${if (lang == "en") "Items" else "عنصر"}",
+                                    text = "${allTasks.size} ${if (lang == "en") "Tasks" else "مهمة"}",
                                     color = colors.textDark,
                                     fontSize = (17f * textScale).sp,
                                     fontWeight = FontWeight.ExtraBold
                                 )
                                 Text(
-                                    text = if (lang == "en") "Tasks & Requests" else "إجمالي المهام والطلبات",
+                                    text = if (lang == "en") "All Scheduled Tasks" else "إجمالي المهام المجدولة",
                                     color = colors.textMuted,
                                     fontSize = (11.5f * textScale).sp
                                 )
@@ -785,7 +777,6 @@ private fun TasksWorkspaceL3(
     dueTasks: List<SmartTask>,
     smartIconSettings: SmartIconSettings,
     dueTodayTotal: Int,
-    requestsCount: Int,
     tasksState: UiState<List<SmartTask>>,
     searchQuery: String,
     activeFilter: TaskFilter,
@@ -880,9 +871,9 @@ private fun TasksWorkspaceL3(
                             Text(
                                 text = prefs.bannerSub.ifBlank {
                                     if (lang == "en") {
-                                        "$dueTodayTotal active today • $requestsCount requests"
+                                        "$dueTodayTotal active today • ${allTasks.size} tasks"
                                     } else {
-                                        "$dueTodayTotal مهام نشطة اليوم • $requestsCount طلبات"
+                                        "$dueTodayTotal مهام نشطة اليوم • ${allTasks.size} الإجمالي"
                                     }
                                 },
                                 color = Color.White.copy(alpha = 0.9f),

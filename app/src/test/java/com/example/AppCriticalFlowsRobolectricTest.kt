@@ -7,10 +7,14 @@ import android.app.Notification
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Color
+import android.net.Uri
+import android.os.PowerManager
 import androidx.test.core.app.ApplicationProvider
+import com.example.data.LocalMediaRepository
 import com.example.data.LocalStoreRepository
-import com.example.model.ChecklistOrderItem
-import com.example.model.ChecklistStyleConfig
 import com.example.model.FloatingBadgeItem
 import com.example.model.MainWallpaperCatalog
 import com.example.model.RepeatMode
@@ -23,6 +27,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
+import java.io.File
+import java.io.FileOutputStream
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -76,17 +82,26 @@ class AppCriticalFlowsRobolectricTest {
     }
 
     @Test
-    fun floatingIconsAndTaskBadges_persistAcrossRestartWithoutReverting() = runBlocking {
+    fun floatingIconsAndTaskBadges_persistIndependentPositionsAndWideOffsetsAcrossRestart() = runBlocking {
         val repo1 = LocalStoreRepository(context)
         repo1.ensureInitialized()
 
         val savedBadges = listOf(
             FloatingBadgeItem(
                 id = "badge_main_1",
-                state = "pixar_gym_dumbbells",
+                state = "bald_exp_cool",
                 xFraction = 0.72f,
                 yFraction = 0.31f,
                 sizeDp = 74f,
+                visible = true,
+                locked = false
+            ),
+            FloatingBadgeItem(
+                id = "badge_main_2",
+                state = "bald_gym_deadlift",
+                xFraction = 0.14f,
+                yFraction = 0.84f,
+                sizeDp = 56f,
                 visible = true,
                 locked = true
             )
@@ -100,11 +115,12 @@ class AppCriticalFlowsRobolectricTest {
             )
         ).getOrThrow()
 
+        // Wide offset beyond old ±260dp clamp must persist verbatim
         repo1.updateTaskBadge(
             taskId = createdId,
-            iconId = "pixar_emotion_happy",
-            offsetX = -18f,
-            offsetY = 24f,
+            iconId = "bald_exp_confident",
+            offsetX = -450f,
+            offsetY = 620f,
             sizeDp = 42f,
             visible = true,
             category = "gym",
@@ -114,57 +130,77 @@ class AppCriticalFlowsRobolectricTest {
 
         // Simulate app restart
         val repo2 = LocalStoreRepository(context)
-        val restoredBadge = repo2.getFloatingBadgesSnapshot().first { it.id == "badge_main_1" }
-        assertEquals("pixar_gym_dumbbells", restoredBadge.state)
-        assertEquals(0.72f, restoredBadge.xFraction, 0.001f)
-        assertEquals(0.31f, restoredBadge.yFraction, 0.001f)
-        assertEquals(74f, restoredBadge.sizeDp, 0.001f)
-        assertTrue(restoredBadge.visible)
-        assertTrue(restoredBadge.locked)
+        val restoredBadges = repo2.getFloatingBadgesSnapshot()
+        val b1 = restoredBadges.first { it.id == "badge_main_1" }
+        val b2 = restoredBadges.first { it.id == "badge_main_2" }
+        assertEquals("bald_exp_cool", b1.state)
+        assertEquals(0.72f, b1.xFraction, 0.001f)
+        assertEquals(0.31f, b1.yFraction, 0.001f)
+        assertEquals("bald_gym_deadlift", b2.state)
+        assertEquals(0.14f, b2.xFraction, 0.001f)
+        assertEquals(0.84f, b2.yFraction, 0.001f)
 
         val restoredTask = repo2.getTasksSnapshot().first { it.id == createdId }
-        assertEquals("pixar_emotion_happy", restoredTask.badgeIconId)
-        assertEquals(-18f, restoredTask.badgeOffsetX, 0.001f)
-        assertEquals(24f, restoredTask.badgeOffsetY, 0.001f)
+        assertEquals("bald_exp_confident", restoredTask.badgeIconId)
+        assertEquals(-450f, restoredTask.badgeOffsetX, 0.001f)
+        assertEquals(620f, restoredTask.badgeOffsetY, 0.001f)
         assertEquals(42f, restoredTask.badgeSizeDp, 0.001f)
         assertTrue(restoredTask.badgeVisible)
         assertTrue(restoredTask.badgeLocked)
     }
 
     @Test
-    fun blankOrdersChecklistAndMarkStyles_persistAcrossRestart() = runBlocking {
+    fun deviceWallpaperImportAndWhatsAppWallpapers_succeedWithoutUriErrorAndPersist() = runBlocking {
+        // Generate a real sample image file simulating a device gallery/file pick
+        val sampleFile = File(context.cacheDir, "sample_device_wallpaper.png")
+        val bmp = Bitmap.createBitmap(640, 960, Bitmap.Config.ARGB_8888)
+        bmp.eraseColor(Color.rgb(20, 184, 166))
+        FileOutputStream(sampleFile).use { out ->
+            bmp.compress(Bitmap.CompressFormat.PNG, 95, out)
+        }
+        bmp.recycle()
+
+        val mediaRepo = LocalMediaRepository(context)
+        val result = mediaRepo.saveWallpaperImage(Uri.fromFile(sampleFile))
+        assertTrue(
+            "Expected saveWallpaperImage to succeed, got: ${result.exceptionOrNull()?.message}",
+            result.isSuccess
+        )
+        val savedPath = result.getOrThrow()
+        val savedFile = File(savedPath)
+        assertTrue("Saved wallpaper file must exist", savedFile.exists() && savedFile.length() > 0L)
+        val decoded = BitmapFactory.decodeFile(savedPath)
+        assertNotNull("Saved wallpaper must be a valid decodable image", decoded)
+        decoded?.recycle()
+
+        // Also verify WhatsApp chat-style wallpaper persists across simulated app restart
         val repo1 = LocalStoreRepository(context)
         repo1.ensureInitialized()
+        val waUri = MainWallpaperCatalog.PREFIX_PRESET + "wa_classic_sand"
+        repo1.updatePreferences(mapOf("mainWallpaperUri" to waUri, "mainWallpaperDimPercent" to 12))
+        val restored = LocalStoreRepository(context).getPreferencesSnapshot()
+        assertEquals(waUri, restored.mainWallpaperUri)
+        assertEquals(12, restored.mainWallpaperDimPercent)
+    }
 
-        val items = listOf(
-            ChecklistOrderItem(id = "ord_1", text = "Protein Powder", status = ChecklistOrderItem.STATUS_CHECK, sortOrder = 1L),
-            ChecklistOrderItem(id = "ord_2", text = "Running Shoes", status = ChecklistOrderItem.STATUS_X, sortOrder = 2L),
-            ChecklistOrderItem(id = "ord_3", text = "Water Bottle", status = ChecklistOrderItem.STATUS_NONE, sortOrder = 3L)
+    @Test
+    fun batteryOptimizationStatus_reflectsLiveOsExemptionImmediately() {
+        val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+        val shadowPower = Shadows.shadowOf(powerManager)
+
+        shadowPower.setIgnoringBatteryOptimizations(context.packageName, false)
+        assertFalse(
+            "When app is NOT exempt, battery optimization warning must be active",
+            TaskAlarmScheduler.isIgnoringBatteryOptimizations(context)
         )
-        val customStyle = ChecklistStyleConfig(
-            styleId = "pixar_mint",
-            shapeId = "squircle",
-            circleSizeDp = 40,
-            markSizeDp = 22,
-            checkColorHex = "#0EA5E9",
-            xColorHex = "#F43F5E",
-            neutralColorHex = "#94A3B8",
-            itemSpacingDp = 14
+        assertFalse(TaskAlarmScheduler.diagnose(context).isIgnoringBatteryOptimizations)
+
+        shadowPower.setIgnoringBatteryOptimizations(context.packageName, true)
+        assertTrue(
+            "When user sets Unrestricted / exempt, warning must clear immediately",
+            TaskAlarmScheduler.isIgnoringBatteryOptimizations(context)
         )
-        repo1.saveChecklistOrders(items)
-        repo1.saveChecklistStyle(customStyle)
-
-        // Simulate app restart
-        val repo2 = LocalStoreRepository(context)
-        val restoredOrders = repo2.getChecklistOrdersSnapshot()
-        assertEquals(3, restoredOrders.size)
-        assertEquals("Protein Powder", restoredOrders[0].text)
-        assertEquals(ChecklistOrderItem.STATUS_CHECK, restoredOrders[0].status)
-        assertEquals(ChecklistOrderItem.STATUS_X, restoredOrders[1].status)
-        assertEquals(ChecklistOrderItem.STATUS_NONE, restoredOrders[2].status)
-
-        val restoredStyle = repo2.getChecklistStyleSnapshot()
-        assertEquals(customStyle, restoredStyle)
+        assertTrue(TaskAlarmScheduler.diagnose(context).isIgnoringBatteryOptimizations)
     }
 
     @Test

@@ -116,7 +116,6 @@ fun HomeScreenControlsContent(
         )
 
         val toggles = listOf(
-            Triple("showTopBarTabs", if (lang == "en") "Top Tabs Bar (Tasks / Requests)" else "شريط التبويبات العلوي (المهام / الطلبات)", prefs.showTopBarTabs),
             Triple("showBanner", if (lang == "en") "Header / Hero Banner" else "بطاقة الترويسة والبانر العلوي", prefs.showBanner),
             Triple("showStatsSummary", if (lang == "en") "Progress Ring & Summary Cards" else "بطاقات الملخص والإحصائيات والعد التنازلي", prefs.showStatsSummary),
             Triple("showWeekStrip", if (lang == "en") "Weekly Days Strip" else "شريط أيام الأسبوع", prefs.showWeekStrip),
@@ -501,34 +500,28 @@ fun ExternalAppIconFolderContent(
     val colors = LocalMNotesColors.current
     val context = LocalContext.current
 
-    // Filter state: All / Circle / Organic / Mint / Beige / Baby Blue / White
+    // Filter state: All / Tasks & Alerts / Gym & Sport / Lifestyle
     var iconFilter by remember { mutableStateOf("all") }
     val filters = listOf(
         "all" to (if (lang == "en") "All (12)" else "الكل (١٢)"),
-        "circle" to (if (lang == "en") "Circle" else "مدورة"),
-        "organic" to (if (lang == "en") "Organic" else "شكل عضوي"),
-        "beige" to (if (lang == "en") "Beige" else "بيج"),
-        "mint" to (if (lang == "en") "Mint" else "مينت"),
-        "blue" to (if (lang == "en") "Baby Blue" else "لبني"),
-        "white" to (if (lang == "en") "White" else "أبيض")
+        "tasks" to (if (lang == "en") "Tasks & Alerts" else "المهام والتذكير"),
+        "fitness" to (if (lang == "en") "Gym & Sport" else "الجيم والرياضة"),
+        "lifestyle" to (if (lang == "en") "Lifestyle" else "يومي وهادئ")
     )
 
     val filteredIcons = remember(iconFilter) {
         MNotesCatalog.launcherIcons.filter { spec ->
             when (iconFilter) {
-                "circle" -> spec.id in setOf("I2", "I4", "I6", "I9", "I11")
-                "organic" -> spec.id in setOf("I3", "I5", "I7", "I10", "I12")
-                "beige" -> spec.id in setOf("I2", "I7", "I11")
-                "mint" -> spec.id in setOf("I1", "I3", "I4", "I6", "I8", "I10", "I12")
-                "blue" -> spec.id in setOf("I5", "I9", "I12")
-                "white" -> spec.id in setOf("I3", "I6", "I8", "I9", "I11")
+                "tasks" -> spec.id in setOf("I1", "I3", "I6", "I8", "I10")
+                "fitness" -> spec.id in setOf("I2", "I4", "I11", "I12")
+                "lifestyle" -> spec.id in setOf("I5", "I7", "I9")
                 else -> true
             }
         }
     }
 
     // Custom Icon Designer State
-    var studioShape by remember { mutableStateOf("blob") }
+    var studioShape by remember { mutableStateOf("ios") }
     var studioSymbol by remember { mutableStateOf("bell_m") }
     var studioBgHex by remember { mutableStateOf("#E6FBF3") }
     var studioFgHex by remember { mutableStateOf("#18C28B") }
@@ -554,9 +547,9 @@ fun ExternalAppIconFolderContent(
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(
             text = if (lang == "en") {
-                "Choose a rounded, organic, reminder & letter design for your phone home screen:"
+                "Choose a Samsung One UI squircle icon with Pixar-style 3D animated characters for your home screen:"
             } else {
-                "اختر أي تصميم مدور أو عضوي أو بألوان البيج والأبيض والمينت واللبني لتغييره كأيقونة للتطبيق:"
+                "اختر أي أيقونة بنمط Samsung One UI وشخصيات 3D Pixar لتغيير أيقونة التطبيق على شاشة هاتفك:"
             },
             color = colors.textMuted,
             fontSize = 11.5.sp
@@ -625,21 +618,19 @@ fun ExternalAppIconFolderContent(
                             ) {
                                 Box(
                                     modifier = Modifier
-                                        .size(58.dp)
-                                        .clip(RoundedCornerShape(18.dp))
+                                        .size(62.dp)
+                                        .clip(RoundedCornerShape(28))
                                         .background(
                                             Brush.linearGradient(listOf(spec.bgStart, spec.bgEnd))
                                         )
-                                        .border(1.dp, colors.borderSoft, RoundedCornerShape(18.dp)),
+                                        .border(1.dp, Color.White.copy(alpha = 0.55f), RoundedCornerShape(28)),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Image(
                                         painter = painterResource(id = spec.fgDrawableRes),
                                         contentDescription = if (lang == "en") spec.nameEn else spec.nameAr,
-                                        contentScale = if (spec.isBitmapArt) ContentScale.Crop else ContentScale.Fit,
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .then(if (spec.isBitmapArt) Modifier else Modifier.padding(4.dp))
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize()
                                     )
                                 }
                                 if (active) {

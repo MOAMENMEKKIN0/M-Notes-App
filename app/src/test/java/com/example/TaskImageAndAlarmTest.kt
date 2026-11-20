@@ -1,10 +1,7 @@
 package com.example
 
-import com.example.model.ChecklistStyleCatalog
-import com.example.model.ChecklistStyleConfig
 import com.example.model.MNotesCatalog
 import com.example.model.MainWallpaperCatalog
-import com.example.model.OrderTextSplitter
 import com.example.model.RepeatMode
 import com.example.model.SmartTask
 import com.example.model.UserPreferences
@@ -12,8 +9,7 @@ import com.example.notification.TaskAlarmScheduler
 import com.example.ui.components.FloatingBadgeCatalog
 import com.example.ui.components.ReminderWallpaperCatalog
 import com.example.ui.components.parseBuiltInUri
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
+import com.example.ui.components.toggleFloatingIconSelection
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -254,64 +250,70 @@ class TaskImageAndAlarmTest {
     }
 
     @Test
-    fun orderTextSplitter_neverAutoSplitsInWholeModeAndSupportsAllOptionalModes() {
-        val sample = "Milk Bread Eggs Cheese"
-        // Default WHOLE mode keeps text completely intact as 1 item
-        assertEquals(listOf("Milk Bread Eggs Cheese"), OrderTextSplitter.split(sample, OrderTextSplitter.MODE_WHOLE))
-
-        // 1 word each
-        assertEquals(listOf("Milk", "Bread", "Eggs", "Cheese"), OrderTextSplitter.split(sample, OrderTextSplitter.MODE_WORDS))
-
-        // 2 words each
-        assertEquals(listOf("Milk Bread", "Eggs Cheese"), OrderTextSplitter.split(sample, OrderTextSplitter.MODE_PAIRS))
-
-        // Custom N words (e.g., 3)
-        assertEquals(listOf("Milk Bread Eggs", "Cheese"), OrderTextSplitter.split(sample, OrderTextSplitter.MODE_CUSTOM_N, wordsPerGroup = 3))
-
-        // Comma / newline
-        val commaSample = "Apples, Bananas\nOranges، Grapes"
-        assertEquals(listOf("Apples", "Bananas", "Oranges", "Grapes"), OrderTextSplitter.split(commaSample, OrderTextSplitter.MODE_COMMA_LINE))
-
-        // Custom delimiter
-        assertEquals(listOf("Item 1", "Item 2", "Item 3"), OrderTextSplitter.split("Item 1 - Item 2 - Item 3", OrderTextSplitter.MODE_CUSTOM_DELIM, customDelimiter = "-"))
+    fun samsungOneUiPixarAppIcons_allTwelveHaveValidDrawableResources() {
+        assertEquals(12, MNotesCatalog.launcherIcons.size)
+        val ids = MNotesCatalog.launcherIcons.map { it.id }
+        assertEquals((1..12).map { "I$it" }, ids)
+        MNotesCatalog.launcherIcons.forEach { spec ->
+            assertTrue("Icon ${spec.id} must be bitmap Pixar 3D art", spec.isBitmapArt)
+            assertTrue("Icon ${spec.id} must have a non-zero drawable resource", spec.fgDrawableRes != 0)
+            assertTrue(spec.nameEn.isNotBlank())
+            assertTrue(spec.nameAr.isNotBlank())
+        }
     }
 
     @Test
-    fun floatingBadgeCatalog_contains36Pixar3DMaleCharactersAndResolvesAllDrawables() {
-        val pixarChars = FloatingBadgeCatalog.icons.filter { it.categoryId == "pixar_chars" }
-        assertEquals("Expected 36 distinct 3D Pixar male characters", 36, pixarChars.size)
+    fun baldMaleWorkoutsAndExpressions_existAndResolveAcrossBothLibraries() {
+        val uris = MNotesCatalog.pixel3dPhotos.map { it.uri }.toSet()
+        for (i in 0..8) {
+            val w1 = "res://img_bald_male_workouts_1#$i"
+            val w2 = "res://img_bald_male_workouts_2#$i"
+            val exp = "res://img_bald_male_expressions#$i"
+            assertTrue("Missing bald male strength workout $w1", uris.contains(w1))
+            assertTrue("Missing bald male cardio workout $w2", uris.contains(w2))
+            assertTrue("Missing bald male expression $exp", uris.contains(exp))
+            assertNotNull(parseBuiltInUri(w1))
+            assertNotNull(parseBuiltInUri(w2))
+            assertNotNull(parseBuiltInUri(exp))
+        }
 
-        // Ensure original baby character & existing icons remain preserved
-        assertTrue(FloatingBadgeCatalog.icons.any { it.id == "char_sleeping_zzz" })
-        assertTrue(FloatingBadgeCatalog.icons.size >= 145)
-
-        // Every Pixar 3D character tile URI must resolve to a valid drawable resource and tile 0..8
-        pixarChars.forEach { spec ->
-            assertNotNull("Missing gridTileUri for ${spec.id}", spec.gridTileUri)
+        // Bald male Pixar expressions & gym icons exist at top of FloatingBadgeCatalog
+        val baldExpressions = FloatingBadgeCatalog.icons.filter { it.categoryId == "bald_expressions" }
+        assertEquals("Expected 9 bald male Pixar 3D expression icons", 9, baldExpressions.size)
+        baldExpressions.forEach { spec ->
             val parsed = parseBuiltInUri(spec.gridTileUri!!)
-            assertNotNull("Failed to parse URI ${spec.gridTileUri} for ${spec.id}", parsed)
-            val (resId, tileIdx) = parsed!!
-            assertTrue("resId must be non-zero for ${spec.id}", resId != 0)
-            assertNotNull("tileIdx must be non-null for ${spec.id}", tileIdx)
-            assertTrue("tileIdx out of 0..8 for ${spec.id}", tileIdx!! in 0..8)
-        }
-
-        // Verify 3D Pixar Checkmark & X medallion sheet resolves all 9 tiles
-        for (idx in 0..8) {
-            val parsed = parseBuiltInUri("res://img_pixar_check_x_pack#$idx")
-            assertNotNull("Failed to parse check/X pack tile #$idx", parsed)
+            assertNotNull("Failed to resolve ${spec.id}", parsed)
             assertTrue(parsed!!.first != 0)
-            assertEquals(idx, parsed.second)
         }
 
-        // Verify wallpaper catalog & checklist style catalog defaults
-        assertEquals("", UserPreferences().mainWallpaperUri)
-        assertTrue(MainWallpaperCatalog.presets.size >= 8)
-        assertTrue(ChecklistStyleCatalog.styles.size >= 10)
-        assertTrue(ChecklistStyleCatalog.shapes.size >= 6)
+        val pixarChars = FloatingBadgeCatalog.icons.filter { it.categoryId == "pixar_chars" }
+        assertTrue("Expected at least 36 Pixar 3D male characters", pixarChars.size >= 36)
+        assertTrue(FloatingBadgeCatalog.icons.any { it.id == "char_sleeping_zzz" })
+        assertTrue(FloatingBadgeCatalog.icons.size >= 160)
+    }
 
-        val style = ChecklistStyleConfig(styleId = "pixar_gold", shapeId = "squircle", circleSizeDp = 40, markSizeDp = 22)
-        val json = Json { ignoreUnknownKeys = true }
-        assertEquals(style, json.decodeFromString<ChecklistStyleConfig>(json.encodeToString(style)))
+    @Test
+    fun whatsappChatWallpapersAndSelectionToggle_workAsExpected() {
+        // Req #6: WhatsApp chat-style wallpapers + soft presets
+        assertEquals("", UserPreferences().mainWallpaperUri)
+        assertTrue("Expected 10 WhatsApp chat wallpapers", MainWallpaperCatalog.whatsappPresets.size >= 10)
+        assertTrue("Expected 8 soft pastel presets", MainWallpaperCatalog.softPresets.size >= 8)
+        MainWallpaperCatalog.whatsappPresets.forEach { preset ->
+            val uri = MainWallpaperCatalog.PREFIX_PRESET + preset.id
+            val resolved = MainWallpaperCatalog.presetForUri(uri)
+            assertNotNull("Expected presetForUri to resolve $uri", resolved)
+            assertEquals(preset.id, resolved?.id)
+            assertEquals(MainWallpaperCatalog.CATEGORY_WHATSAPP, resolved?.category)
+        }
+
+        // Req #8: 1st tap selects; 2nd tap on SAME icon deselects; tapping another selects the new icon
+        val afterFirstTap = toggleFloatingIconSelection(currentSelectedId = null, tappedId = "badge_1")
+        assertEquals("badge_1", afterFirstTap)
+
+        val afterSecondTapSame = toggleFloatingIconSelection(currentSelectedId = afterFirstTap, tappedId = "badge_1")
+        assertNull("Second tap on same icon must deselect immediately", afterSecondTapSame)
+
+        val afterTapOther = toggleFloatingIconSelection(currentSelectedId = "badge_1", tappedId = "badge_2")
+        assertEquals("badge_2", afterTapOther)
     }
 }

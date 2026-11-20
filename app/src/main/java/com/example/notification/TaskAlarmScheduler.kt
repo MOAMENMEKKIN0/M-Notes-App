@@ -427,8 +427,9 @@ object TaskAlarmScheduler {
 
     fun isIgnoringBatteryOptimizations(context: Context): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
-            pm?.isIgnoringBatteryOptimizations(context.packageName) ?: true
+            val appCtx = context.applicationContext ?: context
+            val pm = appCtx.getSystemService(Context.POWER_SERVICE) as? PowerManager
+            pm?.isIgnoringBatteryOptimizations(appCtx.packageName) ?: true
         } else {
             true
         }
